@@ -27,6 +27,9 @@ class get_datasets(Dataset):
 
             # 兼容多特征输入
             'attention_topn': Data_Feat_TOPN,
+
+            # cross-role transferability
+            'cross_role_attention': Data_Feat,
         }
 
         self.dataset_class = MODEL_DATASET_MAP[args.model]
