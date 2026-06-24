@@ -18,6 +18,7 @@ from .graph_mfn import Graph_MFN
 from .attention import Attention
 from .attention_topn import Attention_TOPN
 from .cross_role_attention import CrossRoleAttention
+from .two_stage_model import TwoStageModel
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -51,6 +52,7 @@ class get_models(nn.Module):
 
             # cross-role transferability: shuffle audio/text during training
             'cross_role_attention': CrossRoleAttention,
+            'two_stage_model': TwoStageModel,
 
         }
         self.model = MODEL_MAP[args.model](args)

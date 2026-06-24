@@ -111,6 +111,13 @@ attention_topn:
   grad_clip: [-1.0]
   lr: [1e-3, 1e-4]
 
+two_stage_model:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  modal_shuffle_p: [0.3, 0.5, 0.7]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
 cross_role_attention:
   hidden_dim: [64, 128, 256]
   dropout: [0.2, 0.3, 0.4, 0.5]
