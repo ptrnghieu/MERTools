@@ -17,6 +17,7 @@ from .ef_lstm import EF_LSTM
 from .graph_mfn import Graph_MFN
 from .attention import Attention
 from .attention_topn import Attention_TOPN
+from .cross_role_attention import CrossRoleAttention
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -47,6 +48,9 @@ class get_models(nn.Module):
 
             # 支持每个模态选择topn特征输入
             'attention_topn': Attention_TOPN,
+
+            # cross-role transferability: shuffle audio/text during training
+            'cross_role_attention': CrossRoleAttention,
 
         }
         self.model = MODEL_MAP[args.model](args)
