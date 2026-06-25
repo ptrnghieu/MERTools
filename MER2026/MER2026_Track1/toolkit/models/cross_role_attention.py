@@ -4,9 +4,15 @@ Cross-Role Attention for MER-Cross.
 Train-test gap: model trained on speaker emotion, tested on listener emotion.
 At test time, audio+text come from the speaker while video comes from the listener.
 
-Strategy: randomly shuffle audio+text features across samples with probability p
-during training. Forces the model to rely on video when audio/text are mismatched,
-mirroring the cross-person condition at test time.
+Strategy: modality dropout — randomly zero out audio, text, or both during training.
+Forces the model to predict from video alone when other modalities are absent,
+directly simulating the unreliable-AT condition at test time.
+
+dropout_mode controls what gets zeroed each trigger:
+  'at'   — zero both audio AND text (closest to test condition)
+  'a'    — zero audio only
+  't'    — zero text only
+  'any'  — randomly pick one of the three above each trigger
 '''
 import torch
 import torch.nn as nn
@@ -26,7 +32,8 @@ class CrossRoleAttention(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        self.modal_shuffle_p = getattr(args, 'modal_shuffle_p', 0.5)
+        self.modal_shuffle_p   = getattr(args, 'modal_shuffle_p',   0.5)
+        self.modal_dropout_mode = getattr(args, 'modal_dropout_mode', 'at')
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -43,11 +50,14 @@ class CrossRoleAttention(nn.Module):
         video = batch['videos']
         B     = audio.shape[0]
 
-        if self.training and B > 1 and torch.rand(1).item() < self.modal_shuffle_p:
-            perm  = torch.randperm(B, device=audio.device)
-            lam   = torch.empty(B, 1, device=audio.device).uniform_(0.7, 0.95)
-            audio = lam * audio + (1 - lam) * audio[perm]
-            text  = lam * text  + (1 - lam) * text[perm]
+        if self.training and torch.rand(1).item() < self.modal_shuffle_p:
+            mode = self.modal_dropout_mode
+            if mode == 'any':
+                mode = ['at', 'a', 't'][torch.randint(3, (1,)).item()]
+            if mode in ('at', 'a'):
+                audio = torch.zeros_like(audio)
+            if mode in ('at', 't'):
+                text  = torch.zeros_like(text)
 
         a_h = self.audio_encoder(audio)
         t_h = self.text_encoder(text)
