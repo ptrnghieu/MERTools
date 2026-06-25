@@ -37,6 +37,11 @@ class CrossRoleAttention(nn.Module):
         self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
 
         self.traverse_inference = getattr(args, 'traverse_inference', True)
+        # 'max_conf'  : pick pass with highest max-softmax (original)
+        # 'soft_vote' : weighted average of softmax probs (0.6/0.2/0.2)
+        # 'adaptive'  : trust full pass if conf > threshold, else fallback to no-audio
+        self.traverse_mode      = getattr(args, 'traverse_mode',      'soft_vote')
+        self.adaptive_threshold = getattr(args, 'adaptive_threshold', 0.65)
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -82,19 +87,33 @@ class CrossRoleAttention(nn.Module):
             # Pass 3: text masked (suspect text is cross-person noise)
             feat_no_t = self._encode(audio, torch.zeros_like(text), video)
 
-            logits_full = self.fc_out_1(feat_full)
-            logits_no_a = self.fc_out_1(feat_no_a)
-            logits_no_t = self.fc_out_1(feat_no_t)
+            prob_full = F.softmax(self.fc_out_1(feat_full), dim=1)  # [B, C]
+            prob_no_a = F.softmax(self.fc_out_1(feat_no_a), dim=1)
+            prob_no_t = F.softmax(self.fc_out_1(feat_no_t), dim=1)
 
-            # Pick the pass with highest softmax confidence per sample
-            conf_full = F.softmax(logits_full, dim=1).max(dim=1)[0]  # [B]
-            conf_no_a = F.softmax(logits_no_a, dim=1).max(dim=1)[0]
-            conf_no_t = F.softmax(logits_no_t, dim=1).max(dim=1)[0]
+            if self.traverse_mode == 'soft_vote':
+                # Weighted average: full pass keeps majority vote
+                final_prob = 0.6 * prob_full + 0.2 * prob_no_a + 0.2 * prob_no_t
+                emos_out   = torch.log(final_prob + 1e-8)  # back to log-space for CE loss
 
-            confs  = torch.stack([conf_full, conf_no_a, conf_no_t], dim=1)  # [B, 3]
-            best   = confs.argmax(dim=1)                                     # [B]
-            stack  = torch.stack([logits_full, logits_no_a, logits_no_t], dim=1)  # [B, 3, C]
-            emos_out = stack[torch.arange(stack.size(0), device=stack.device), best]
+            elif self.traverse_mode == 'adaptive':
+                # Trust full pass if confident; fallback to no-audio when ambiguous
+                conf_full = prob_full.max(dim=1)[0]                          # [B]
+                use_full  = (conf_full > self.adaptive_threshold).float()    # [B] 0/1
+                # blend: use_full * prob_full + (1-use_full) * prob_no_a
+                final_prob = use_full.unsqueeze(1) * prob_full + \
+                             (1 - use_full).unsqueeze(1) * prob_no_a
+                emos_out   = torch.log(final_prob + 1e-8)
+
+            else:  # 'max_conf' — original behaviour
+                conf_full = prob_full.max(dim=1)[0]
+                conf_no_a = prob_no_a.max(dim=1)[0]
+                conf_no_t = prob_no_t.max(dim=1)[0]
+                confs     = torch.stack([conf_full, conf_no_a, conf_no_t], dim=1)
+                best      = confs.argmax(dim=1)
+                probs     = torch.stack([prob_full, prob_no_a, prob_no_t], dim=1)  # [B,3,C]
+                final_prob = probs[torch.arange(probs.size(0), device=probs.device), best]
+                emos_out   = torch.log(final_prob + 1e-8)
 
             vals_out  = self.fc_out_2(feat_full)
             interloss = torch.zeros(1, device=audio.device).squeeze()
