@@ -4,31 +4,19 @@ Cross-Role Attention for MER-Cross.
 Train-test gap: model trained on speaker emotion, tested on listener emotion.
 At test time, audio+text come from the speaker while video comes from the listener.
 
-Two complementary strategies:
-  1. Dynamic Modality Dropout — randomly zero each modality combination so the
-     model learns to predict without reliable audio/text.
-  2. Gradient Scaling — scale down audio/text gradients in the backward pass so
-     the video branch gets proportionally more gradient signal and is optimised
-     deeper, without distorting the forward-pass feature geometry.
+Training strategy: Dynamic Modality Dropout — randomly zero each modality combination
+so the model learns to predict without reliable audio/text.
+
+Inference strategy: Traverse Inference — run each test sample 3 times with different
+masking schemas and pick the prediction with highest confidence:
+  Pass 1: [audio, text, video]  (full input)
+  Pass 2: [zeros, text, video]  (suspect audio unreliable)
+  Pass 3: [audio, zeros, video] (suspect text unreliable)
 '''
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from .modules.encoder import MLPEncoder
-
-
-class GradScaleFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, alpha):
-        ctx.alpha = alpha
-        return x.view_as(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return grad_output * ctx.alpha, None
-
-
-def scale_grad(x, alpha):
-    return GradScaleFunction.apply(x, alpha)
 
 
 class CrossRoleAttention(nn.Module):
@@ -44,15 +32,11 @@ class CrossRoleAttention(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        # Dynamic Modality Dropout probabilities (must sum <= 1.0)
         self.p_mask_a  = getattr(args, 'p_mask_a',  0.30)
         self.p_mask_t  = getattr(args, 'p_mask_t',  0.20)
         self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
 
-        # Gradient scaling: alpha < 1.0 slows optimisation of that branch
-        self.alpha_audio = getattr(args, 'alpha_audio', 0.3)
-        self.alpha_text  = getattr(args, 'alpha_text',  0.5)
-        # video alpha is always 1.0 (full gradient)
+        self.traverse_inference = getattr(args, 'traverse_inference', True)
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -62,6 +46,17 @@ class CrossRoleAttention(nn.Module):
         self.fc_att        = nn.Linear(hidden_dim, 3)
         self.fc_out_1      = nn.Linear(hidden_dim, output_dim1)
         self.fc_out_2      = nn.Linear(hidden_dim, output_dim2)
+
+    def _encode(self, audio, text, video):
+        a_h = self.audio_encoder(audio)
+        t_h = self.text_encoder(text)
+        v_h = self.video_encoder(video)
+        attn_h   = self.attention_mlp(torch.cat([a_h, t_h, v_h], dim=1))
+        attn_raw = self.fc_att(attn_h)
+        attn_w   = torch.softmax(attn_raw, dim=1)
+        stacked  = torch.stack([a_h, t_h, v_h], dim=2)
+        features = torch.matmul(stacked, attn_w.unsqueeze(2)).squeeze(2)
+        return features
 
     def forward(self, batch):
         audio = batch['audios']
@@ -77,20 +72,36 @@ class CrossRoleAttention(nn.Module):
             elif r < self.p_mask_a + self.p_mask_t + self.p_mask_at:
                 audio = torch.zeros_like(audio)
                 text  = torch.zeros_like(text)
+            features = self._encode(audio, text, video)
 
-        a_h = self.audio_encoder(audio)
-        t_h = self.text_encoder(text)
-        v_h = self.video_encoder(video)
+        elif self.traverse_inference:
+            # Pass 1: full input
+            feat_full = self._encode(audio, text, video)
+            # Pass 2: audio masked (suspect audio is cross-person noise)
+            feat_no_a = self._encode(torch.zeros_like(audio), text, video)
+            # Pass 3: text masked (suspect text is cross-person noise)
+            feat_no_t = self._encode(audio, torch.zeros_like(text), video)
 
-        # Scale down audio/text gradients; video gets full gradient signal
-        a_h = scale_grad(a_h, self.alpha_audio)
-        t_h = scale_grad(t_h, self.alpha_text)
+            logits_full = self.fc_out_1(feat_full)
+            logits_no_a = self.fc_out_1(feat_no_a)
+            logits_no_t = self.fc_out_1(feat_no_t)
 
-        attn_h   = self.attention_mlp(torch.cat([a_h, t_h, v_h], dim=1))
-        attn_raw = self.fc_att(attn_h)
-        attn_w   = torch.softmax(attn_raw, dim=1)                         # [B, 3]
-        stacked  = torch.stack([a_h, t_h, v_h], dim=2)                   # [B, H, 3]
-        features = torch.matmul(stacked, attn_w.unsqueeze(2)).squeeze(2)  # [B, H]
+            # Pick the pass with highest softmax confidence per sample
+            conf_full = F.softmax(logits_full, dim=1).max(dim=1)[0]  # [B]
+            conf_no_a = F.softmax(logits_no_a, dim=1).max(dim=1)[0]
+            conf_no_t = F.softmax(logits_no_t, dim=1).max(dim=1)[0]
+
+            confs  = torch.stack([conf_full, conf_no_a, conf_no_t], dim=1)  # [B, 3]
+            best   = confs.argmax(dim=1)                                     # [B]
+            stack  = torch.stack([logits_full, logits_no_a, logits_no_t], dim=1)  # [B, 3, C]
+            emos_out = stack[torch.arange(stack.size(0), device=stack.device), best]
+
+            vals_out  = self.fc_out_2(feat_full)
+            interloss = torch.zeros(1, device=audio.device).squeeze()
+            return feat_full, emos_out, vals_out, interloss
+
+        else:
+            features = self._encode(audio, text, video)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
