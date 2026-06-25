@@ -1,0 +1,9 @@
+cross_role_attention:
+  hidden_dim: 128
+  dropout: 0.3
+  p_mask_a:     0.30
+  p_mask_t:     0.20
+  p_mask_at:    0.20
+  coral_lambda: 0.5
+  grad_clip: -1.0
+  lr: 1e-4
