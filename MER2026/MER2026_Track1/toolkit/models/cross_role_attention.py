@@ -4,15 +4,15 @@ Cross-Role Attention for MER-Cross.
 Train-test gap: model trained on speaker emotion, tested on listener emotion.
 At test time, audio+text come from the speaker while video comes from the listener.
 
-Strategy: modality dropout — randomly zero out audio, text, or both during training.
-Forces the model to predict from video alone when other modalities are absent,
-directly simulating the unreliable-AT condition at test time.
+Strategy: Dynamic Modality Dropout — independently mask each modality combination
+with probabilities derived from transferability (HuBERT overfits most → masked most;
+video is most reliable → never masked).
 
-dropout_mode controls what gets zeroed each trigger:
-  'at'   — zero both audio AND text (closest to test condition)
-  'a'    — zero audio only
-  't'    — zero text only
-  'any'  — randomly pick one of the three above each trigger
+Default schedule:
+  30% — mask audio only  (force model to use text + video)
+  20% — mask text only   (force model to use audio + video)
+  20% — mask audio+text  (force model to use video only — core cross-role condition)
+  30% — keep all three
 '''
 import torch
 import torch.nn as nn
@@ -32,8 +32,10 @@ class CrossRoleAttention(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        self.modal_shuffle_p   = getattr(args, 'modal_shuffle_p',   0.5)
-        self.modal_dropout_mode = getattr(args, 'modal_dropout_mode', 'at')
+        # p_mask_a + p_mask_t + p_mask_at <= 1.0; remainder = keep all
+        self.p_mask_a  = getattr(args, 'p_mask_a',  0.30)
+        self.p_mask_t  = getattr(args, 'p_mask_t',  0.20)
+        self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -48,16 +50,17 @@ class CrossRoleAttention(nn.Module):
         audio = batch['audios']
         text  = batch['texts']
         video = batch['videos']
-        B     = audio.shape[0]
 
-        if self.training and torch.rand(1).item() < self.modal_shuffle_p:
-            mode = self.modal_dropout_mode
-            if mode == 'any':
-                mode = ['at', 'a', 't'][torch.randint(3, (1,)).item()]
-            if mode in ('at', 'a'):
+        if self.training:
+            r = torch.rand(1).item()
+            if r < self.p_mask_a:
                 audio = torch.zeros_like(audio)
-            if mode in ('at', 't'):
+            elif r < self.p_mask_a + self.p_mask_t:
                 text  = torch.zeros_like(text)
+            elif r < self.p_mask_a + self.p_mask_t + self.p_mask_at:
+                audio = torch.zeros_like(audio)
+                text  = torch.zeros_like(text)
+            # else: keep all three (remaining probability)
 
         a_h = self.audio_encoder(audio)
         t_h = self.text_encoder(text)
