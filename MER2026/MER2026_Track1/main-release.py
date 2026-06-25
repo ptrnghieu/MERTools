@@ -201,6 +201,17 @@ if __name__ == '__main__':
     print (f'train&val folder:{len(train_loaders)}; test sets:{len(test_loaders)}')
     args.audio_dim, args.text_dim, args.video_dim = train_loaders[0].dataset.get_featdim()
 
+    # Pre-extract test video features for Video CORAL alignment (CPU tensor, shared across folds)
+    _test_video_feats = None
+    if args.model == 'cross_role_attention':
+        _vlist = []
+        with torch.no_grad():
+            for _data in test_loaders[0]:
+                _batch, _, _, _ = _data
+                _vlist.append(_batch['videos'])
+        _test_video_feats = torch.cat(_vlist, dim=0)  # [N_test, video_dim] on CPU
+        print(f'Loaded test video features for CORAL: {_test_video_feats.shape}')
+
 
     print ('====== Training and Evaluation =======')
     folder_save = [] # 存储每个folder下的最好结果
@@ -213,6 +224,8 @@ if __name__ == '__main__':
 
         print (f'Step1: build model (each folder has its own model)')
         model = get_models(args).cuda()
+        if _test_video_feats is not None:
+            model.model.test_video_feats = _test_video_feats  # CPU tensor, moved to GPU per batch
         reg_loss = MSELoss().cuda()
         cls_loss = CELoss().cuda()
 
@@ -237,10 +250,6 @@ if __name__ == '__main__':
 
             ## training and validation
             train_results = train_or_eval_model(args, model, reg_loss, cls_loss, train_loader, epoch=epoch, optimizer=optimizer, train=True )
-            # CV eval: traverse_inference OFF — clean signal for hyperparameter selection
-            if hasattr(model, 'model'): _m = model.model
-            else: _m = model
-            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = False
             eval_results  = train_or_eval_model(args, model, reg_loss, cls_loss, eval_loader,  epoch=epoch, optimizer=None,      train=False)
             func_update_storage(inputs=eval_results, prefix='eval', outputs=epoch_store)
             # print (epoch_store.keys()) # debug
@@ -251,12 +260,10 @@ if __name__ == '__main__':
             whole_metrics.append(eval_metric)
             print ('epoch:%d; metric:%s; train results:%.4f; eval results:%.4f' %(epoch+1, args.metric_name, train_metric, eval_metric))
 
-            ## testing and saving — traverse_inference ON if requested
-            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = args.traverse_test
+            ## testing and saving
             for jj, test_loader in enumerate(test_loaders):
                 test_results = train_or_eval_model(args, model, reg_loss, cls_loss, test_loader, epoch=epoch, optimizer=None, train=False)
                 func_update_storage(inputs=test_results, prefix=f'test{jj+1}', outputs=epoch_store)
-            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = False
             
             ## saving
             whole_store.append(epoch_store)
