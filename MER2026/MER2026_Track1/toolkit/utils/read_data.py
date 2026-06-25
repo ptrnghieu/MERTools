@@ -9,7 +9,10 @@ import multiprocessing
 from ..globals import *
 from .functions import *
 from .read_files import *
-from toolkit.models.modules.affectgpt.models.ImageBind.data import load_and_transform_audio_data
+try:
+    from toolkit.models.modules.affectgpt.models.ImageBind.data import load_and_transform_audio_data
+except Exception:
+    load_and_transform_audio_data = None
 
 
 ############################################################
