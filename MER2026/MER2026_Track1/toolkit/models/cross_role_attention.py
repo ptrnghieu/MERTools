@@ -85,10 +85,11 @@ class CrossRoleAttention(nn.Module):
             if self.transfer_lambda > 0:
                 interloss = interloss + self.transfer_lambda * attention_weights[:, :2].sum(dim=1).mean()
 
-            # Supervised contrastive loss: pull same-emotion representations together.
-            # After modal shuffling, video is the only reliable signal aligned with the label,
-            # so SupConLoss + shuffling jointly push the model toward video-dominant embeddings.
+            # Supervised contrastive loss on video_hidden only.
+            # video is never shuffled → always aligned with the label.
+            # This pushes video encoder to learn emotion-discriminative clusters
+            # without interference from shuffled audio/text.
             if self.supcon_lambda > 0 and 'emos' in batch:
-                interloss = interloss + self.supcon_lambda * self.supcon_loss_fn(features, batch['emos'])
+                interloss = interloss + self.supcon_lambda * self.supcon_loss_fn(video_hidden, batch['emos'])
 
         return features, emos_out, vals_out, interloss
