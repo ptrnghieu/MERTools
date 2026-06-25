@@ -12,6 +12,7 @@ expression) rather than audio/text (role-specific speech features).
 import torch
 import torch.nn as nn
 from .modules.encoder import MLPEncoder
+from toolkit.utils.loss import SupConLoss
 
 
 class CrossRoleAttention(nn.Module):
@@ -27,10 +28,10 @@ class CrossRoleAttention(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        # probability of shuffling each non-transferable modality per forward pass
         self.modal_shuffle_p = getattr(args, 'modal_shuffle_p', 0.5)
-        # coefficient for attention-based transferability regularization
-        self.transfer_lambda = getattr(args, 'transfer_lambda', 0.1)
+        self.transfer_lambda = getattr(args, 'transfer_lambda', 0.0)
+        self.supcon_lambda   = getattr(args, 'supcon_lambda', 0.1)
+        self.supcon_loss_fn  = SupConLoss(temperature=0.07)
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -77,12 +78,17 @@ class CrossRoleAttention(nn.Module):
         emos_out = self.fc_out_1(features)
         vals_out = self.fc_out_2(features)
 
-        # Transferability regularization: penalise attention mass on audio+text.
-        # Gradient signal encourages the model to upweight video even when
-        # audio/text are present (because at test time they are unreliable).
-        if self.training and self.transfer_lambda > 0:
-            interloss = self.transfer_lambda * attention_weights[:, :2].sum(dim=1).mean()
-        else:
-            interloss = torch.tensor(0).cuda()
+        interloss = torch.tensor(0.0).cuda()
+
+        if self.training:
+            # Transferability regularization: penalise attention on audio+text
+            if self.transfer_lambda > 0:
+                interloss = interloss + self.transfer_lambda * attention_weights[:, :2].sum(dim=1).mean()
+
+            # Supervised contrastive loss: pull same-emotion representations together.
+            # After modal shuffling, video is the only reliable signal aligned with the label,
+            # so SupConLoss + shuffling jointly push the model toward video-dominant embeddings.
+            if self.supcon_lambda > 0 and 'emos' in batch:
+                interloss = interloss + self.supcon_lambda * self.supcon_loss_fn(features, batch['emos'])
 
         return features, emos_out, vals_out, interloss

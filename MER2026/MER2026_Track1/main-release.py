@@ -37,6 +37,7 @@ def train_or_eval_model(args, model, reg_loss, cls_loss, dataloader, epoch, opti
         for key in batch: batch[key] = batch[key].cuda()
         emos = emos.cuda()
         vals = vals.cuda()
+        batch['emos'] = emos  # available to models that need labels (e.g. SupConLoss)
 
         # forward process
         # start_time = time.time()
