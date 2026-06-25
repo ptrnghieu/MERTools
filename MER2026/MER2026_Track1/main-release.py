@@ -126,6 +126,8 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=100, metavar='E', help='number of epochs')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default=0, type=int, help='GPU id to use')
+    parser.add_argument('--traverse_test', action='store_true', default=False,
+                        help='enable traverse inference only at test time (not CV eval)')
     args = parser.parse_args()
     torch.cuda.set_device(args.gpu)
 
@@ -235,6 +237,10 @@ if __name__ == '__main__':
 
             ## training and validation
             train_results = train_or_eval_model(args, model, reg_loss, cls_loss, train_loader, epoch=epoch, optimizer=optimizer, train=True )
+            # CV eval: traverse_inference OFF — clean signal for hyperparameter selection
+            if hasattr(model, 'model'): _m = model.model
+            else: _m = model
+            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = False
             eval_results  = train_or_eval_model(args, model, reg_loss, cls_loss, eval_loader,  epoch=epoch, optimizer=None,      train=False)
             func_update_storage(inputs=eval_results, prefix='eval', outputs=epoch_store)
             # print (epoch_store.keys()) # debug
@@ -245,10 +251,12 @@ if __name__ == '__main__':
             whole_metrics.append(eval_metric)
             print ('epoch:%d; metric:%s; train results:%.4f; eval results:%.4f' %(epoch+1, args.metric_name, train_metric, eval_metric))
 
-            ## testing and saving
+            ## testing and saving — traverse_inference ON if requested
+            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = args.traverse_test
             for jj, test_loader in enumerate(test_loaders):
                 test_results = train_or_eval_model(args, model, reg_loss, cls_loss, test_loader, epoch=epoch, optimizer=None, train=False)
                 func_update_storage(inputs=test_results, prefix=f'test{jj+1}', outputs=epoch_store)
+            if hasattr(_m, 'traverse_inference'): _m.traverse_inference = False
             
             ## saving
             whole_store.append(epoch_store)

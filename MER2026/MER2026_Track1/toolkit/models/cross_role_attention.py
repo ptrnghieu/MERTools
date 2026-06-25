@@ -7,11 +7,13 @@ At test time, audio+text come from the speaker while video comes from the listen
 Training strategy: Dynamic Modality Dropout — randomly zero each modality combination
 so the model learns to predict without reliable audio/text.
 
-Inference strategy: Traverse Inference — run each test sample 3 times with different
-masking schemas and pick the prediction with highest confidence:
-  Pass 1: [audio, text, video]  (full input)
-  Pass 2: [zeros, text, video]  (suspect audio unreliable)
-  Pass 3: [audio, zeros, video] (suspect text unreliable)
+Inference strategy (traverse_inference=True, only at test time):
+  Adaptive Video Anchor — run 2 passes and fall back to video-only when full pass is
+  ambiguous (high entropy signals audio/text are causing cross-role confusion):
+    Pass 1 (Full):       [audio, text, video]
+    Pass 2 (Anchor):     [zeros, zeros, video]
+  If entropy(full) < threshold  → trust full pass
+  Else                           → use video-only anchor
 '''
 import torch
 import torch.nn as nn
@@ -36,12 +38,9 @@ class CrossRoleAttention(nn.Module):
         self.p_mask_t  = getattr(args, 'p_mask_t',  0.20)
         self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
 
-        self.traverse_inference = getattr(args, 'traverse_inference', True)
-        # 'max_conf'  : pick pass with highest max-softmax (original)
-        # 'soft_vote' : weighted average of softmax probs (0.6/0.2/0.2)
-        # 'adaptive'  : trust full pass if conf > threshold, else fallback to no-audio
-        self.traverse_mode      = getattr(args, 'traverse_mode',      'soft_vote')
-        self.adaptive_threshold = getattr(args, 'adaptive_threshold', 0.65)
+        # Disabled by default; main-release.py enables only during test eval
+        self.traverse_inference  = False
+        self.entropy_threshold   = getattr(args, 'entropy_threshold', 1.0)
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -81,39 +80,23 @@ class CrossRoleAttention(nn.Module):
 
         elif self.traverse_inference:
             # Pass 1: full input
-            feat_full = self._encode(audio, text, video)
-            # Pass 2: audio masked (suspect audio is cross-person noise)
-            feat_no_a = self._encode(torch.zeros_like(audio), text, video)
-            # Pass 3: text masked (suspect text is cross-person noise)
-            feat_no_t = self._encode(audio, torch.zeros_like(text), video)
+            feat_full   = self._encode(audio, text, video)
+            logits_full = self.fc_out_1(feat_full)
+            prob_full   = F.softmax(logits_full, dim=1)                   # [B, C]
 
-            prob_full = F.softmax(self.fc_out_1(feat_full), dim=1)  # [B, C]
-            prob_no_a = F.softmax(self.fc_out_1(feat_no_a), dim=1)
-            prob_no_t = F.softmax(self.fc_out_1(feat_no_t), dim=1)
+            # Entropy per sample: high entropy = model is confused = likely cross-role noise
+            entropy = -(prob_full * (prob_full + 1e-9).log()).sum(dim=1)  # [B]
 
-            if self.traverse_mode == 'soft_vote':
-                # Weighted average: full pass keeps majority vote
-                final_prob = 0.6 * prob_full + 0.2 * prob_no_a + 0.2 * prob_no_t
-                emos_out   = torch.log(final_prob + 1e-8)  # back to log-space for CE loss
+            # Pass 2: video-only anchor (zeros audio AND text)
+            feat_anch   = self._encode(torch.zeros_like(audio), torch.zeros_like(text), video)
+            logits_anch = self.fc_out_1(feat_anch)
 
-            elif self.traverse_mode == 'adaptive':
-                # Trust full pass if confident; fallback to no-audio when ambiguous
-                conf_full = prob_full.max(dim=1)[0]                          # [B]
-                use_full  = (conf_full > self.adaptive_threshold).float()    # [B] 0/1
-                # blend: use_full * prob_full + (1-use_full) * prob_no_a
-                final_prob = use_full.unsqueeze(1) * prob_full + \
-                             (1 - use_full).unsqueeze(1) * prob_no_a
-                emos_out   = torch.log(final_prob + 1e-8)
-
-            else:  # 'max_conf' — original behaviour
-                conf_full = prob_full.max(dim=1)[0]
-                conf_no_a = prob_no_a.max(dim=1)[0]
-                conf_no_t = prob_no_t.max(dim=1)[0]
-                confs     = torch.stack([conf_full, conf_no_a, conf_no_t], dim=1)
-                best      = confs.argmax(dim=1)
-                probs     = torch.stack([prob_full, prob_no_a, prob_no_t], dim=1)  # [B,3,C]
-                final_prob = probs[torch.arange(probs.size(0), device=probs.device), best]
-                emos_out   = torch.log(final_prob + 1e-8)
+            # Adaptive fallback: per-sample selection
+            use_full = (entropy < self.entropy_threshold).float().unsqueeze(1)  # [B, 1]
+            # Blend in log-space (for compatibility with CE loss downstream)
+            prob_anch  = F.softmax(logits_anch, dim=1)
+            final_prob = use_full * prob_full + (1 - use_full) * prob_anch
+            emos_out   = torch.log(final_prob + 1e-8)
 
             vals_out  = self.fc_out_2(feat_full)
             interloss = torch.zeros(1, device=audio.device).squeeze()
