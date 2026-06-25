@@ -45,8 +45,9 @@ class CrossRoleAttention(nn.Module):
 
         if self.training and B > 1 and torch.rand(1).item() < self.modal_shuffle_p:
             perm  = torch.randperm(B, device=audio.device)
-            audio = audio[perm]
-            text  = text[perm]
+            lam   = torch.empty(B, 1, device=audio.device).uniform_(0.7, 0.95)
+            audio = lam * audio + (1 - lam) * audio[perm]
+            text  = lam * text  + (1 - lam) * text[perm]
 
         a_h = self.audio_encoder(audio)
         t_h = self.text_encoder(text)
