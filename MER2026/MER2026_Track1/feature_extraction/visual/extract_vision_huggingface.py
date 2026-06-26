@@ -159,7 +159,7 @@ if __name__ == '__main__':
                 frames = [func_opencv_to_image(frame) for frame in frames]
                 inputs = processor(images=frames, return_tensors="pt")['pixel_values']
                 if params.gpu != -1: inputs = inputs.to("cuda")
-                batches = split_into_batch(inputs, bsize=32)
+                batches = split_into_batch(inputs, bsize=128)
                 embeddings = []
                 for batch in batches:
                     vision_out = model.vision_model(pixel_values=batch)
