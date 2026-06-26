@@ -33,11 +33,11 @@ class Data_Feat(Dataset):
         assert self.feat_type in ['utt', 'frm_align', 'frm_unalign']
 
         # read datas (reduce __getitem__ durations)
-        # Pass scale_factor so each worker compresses before returning,
-        # keeping IPC queue payloads small and avoiding OOM on large datasets.
-        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale)
-        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale)
-        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale)
+        # Compress and truncate inside each worker to keep IPC payload small.
+        # max_seqlen caps outlier-length sequences after scale compression.
+        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=64)
+        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=32)
+        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=32)
 
         ## read batch (reduce collater durations)
         # step2: align to batch
