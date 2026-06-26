@@ -160,7 +160,11 @@ if __name__ == '__main__':
                 batches = split_into_batch(inputs, bsize=32)
                 embeddings = []
                 for batch in batches:
-                    embeddings.append(model.get_image_features(batch)) # [58, 768]
+                    out = model.get_image_features(pixel_values=batch)
+                    # newer transformers may return a dataclass instead of a plain tensor
+                    if not isinstance(out, torch.Tensor):
+                        out = out.image_embeds if hasattr(out, 'image_embeds') else out[0]
+                    embeddings.append(out)
                 embeddings = torch.cat(embeddings, axis=0) # [frames_num, 768]
 
             elif params.model_name in [DATA2VEC_VISUAL]:
