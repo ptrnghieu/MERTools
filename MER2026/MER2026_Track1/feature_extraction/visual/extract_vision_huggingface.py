@@ -119,7 +119,11 @@ if __name__ == '__main__':
     if params.model_name in [CLIP_VIT_BASE, CLIP_VIT_LARGE, DATA2VEC_VISUAL, VIDEOMAE_BASE, VIDEOMAE_LARGE]: # from huggingface
         model_dir = os.path.join(config.PATH_TO_PRETRAINED_MODELS, f'transformers/{params.model_name}')
         model = AutoModel.from_pretrained(model_dir)
-        processor  = AutoFeatureExtractor.from_pretrained(model_dir)
+        try:
+            processor = AutoFeatureExtractor.from_pretrained(model_dir)
+        except ValueError:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(model_dir)
     elif params.model_name in [DINO2_LARGE, DINO2_GIANT]:
         model_dir = os.path.join(config.PATH_TO_PRETRAINED_MODELS, f'transformers/{params.model_name}')
         model = AutoModel.from_pretrained(model_dir)
