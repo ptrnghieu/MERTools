@@ -17,7 +17,7 @@ CORAL and Dynamic Dropout are training-only regularisers.
 '''
 import torch
 import torch.nn as nn
-from .modules.encoder import MLPEncoder
+from .modules.encoder import MLPEncoder, LSTMEncoder
 
 
 class CrossRoleAttention(nn.Module):
@@ -38,12 +38,18 @@ class CrossRoleAttention(nn.Module):
         self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
         self.coral_lambda = getattr(args, 'coral_lambda', 0.1)
 
-        # Set by main-release.py before training: CPU tensor [N_test, video_dim]
+        # Set by main-release.py before training: CPU tensor [N_test, video_dim] or [N_test, seq_len, video_dim]
         self.test_video_feats = None
 
-        self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
-        self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
-        self.video_encoder = MLPEncoder(video_dim, hidden_dim, dropout)
+        feat_type = getattr(args, 'feat_type', 'utt')
+        if feat_type in ['frm_align', 'frm_unalign']:
+            self.audio_encoder = LSTMEncoder(audio_dim, hidden_dim, dropout)
+            self.text_encoder  = LSTMEncoder(text_dim,  hidden_dim, dropout)
+            self.video_encoder = LSTMEncoder(video_dim, hidden_dim, dropout)
+        else:
+            self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
+            self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
+            self.video_encoder = MLPEncoder(video_dim, hidden_dim, dropout)
 
         self.attention_mlp = MLPEncoder(hidden_dim * 3, hidden_dim, dropout)
         self.fc_att        = nn.Linear(hidden_dim, 3)
