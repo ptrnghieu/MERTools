@@ -1,3 +1,4 @@
+import math
 import torch
 import numpy as np
 from torch.utils.data import Dataset
@@ -32,13 +33,20 @@ class Data_Feat(Dataset):
         assert self.feat_type in ['utt', 'frm_align', 'frm_unalign']
 
         # read datas (reduce __getitem__ durations)
+        # Compress each modality immediately after loading to limit peak RAM usage
         audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat')
+        for ii in range(len(audios)):
+            audios[ii] = func_mapping_feature(audios[ii], max(1, math.ceil(len(audios[ii]) / self.feat_scale)))
+
         texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat')
+        for ii in range(len(texts)):
+            texts[ii] = func_mapping_feature(texts[ii], max(1, math.ceil(len(texts[ii]) / self.feat_scale)))
+
         videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat')
+        for ii in range(len(videos)):
+            videos[ii] = func_mapping_feature(videos[ii], max(1, math.ceil(len(videos[ii]) / self.feat_scale)))
 
         ## read batch (reduce collater durations)
-        # step1: pre-compress features
-        audios, texts, videos = feature_scale_compress(audios, texts, videos, self.feat_scale)
         # step2: align to batch
         if self.feat_type == 'utt': # -> 每个样本每个模态的特征压缩到句子级别
             audios, texts, videos = align_to_utt(audios, texts, videos)
