@@ -46,13 +46,26 @@ def func_read_one_feat(argv=None, feature_root=None, name=None, processor=None, 
     return single_feature
 
 
+def func_read_one_feat_scaled(argv):
+    """Like func_read_one_feat but compresses to scale_factor before returning.
+    Keeps the IPC queue payload small, avoiding OOM on large datasets."""
+    feature_root, name, processor, model_name, scale_factor = argv
+    feat = func_read_one_feat((feature_root, name, processor, model_name))
+    if scale_factor > 1:
+        feat = func_mapping_feature(feat, max(1, math.ceil(len(feat) / scale_factor)))
+    return feat
+
+
 # model_name：表示用的哪个预训练模型
 # read multiple data [different datasets need different processors]
-def func_read_multiprocess(feature_root, names, processor=None, read_type='feat', model_name=None):
+def func_read_multiprocess(feature_root, names, processor=None, read_type='feat', model_name=None, scale_factor=1):
     ## names => features
     params = []
     for name in names:
-        params.append((feature_root, name, processor, model_name))
+        if scale_factor > 1:
+            params.append((feature_root, name, processor, model_name, scale_factor))
+        else:
+            params.append((feature_root, name, processor, model_name))
 
     # ------ debug ------
     # func_read_one_feat(params[0])
@@ -62,7 +75,8 @@ def func_read_multiprocess(feature_root, names, processor=None, read_type='feat'
     features = []
     with multiprocessing.Pool(processes=8) as pool:
         if read_type == 'feat':
-            features = list(tqdm.tqdm(pool.imap(func_read_one_feat, params), total=len(params)))
+            worker = func_read_one_feat_scaled if scale_factor > 1 else func_read_one_feat
+            features = list(tqdm.tqdm(pool.imap(worker, params), total=len(params)))
 
     ## save (names, features)
     feature_shape = np.array(features[0]).shape

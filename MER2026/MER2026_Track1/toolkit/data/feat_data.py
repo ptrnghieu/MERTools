@@ -33,18 +33,11 @@ class Data_Feat(Dataset):
         assert self.feat_type in ['utt', 'frm_align', 'frm_unalign']
 
         # read datas (reduce __getitem__ durations)
-        # Compress each modality immediately after loading to limit peak RAM usage
-        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat')
-        for ii in range(len(audios)):
-            audios[ii] = func_mapping_feature(audios[ii], max(1, math.ceil(len(audios[ii]) / self.feat_scale)))
-
-        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat')
-        for ii in range(len(texts)):
-            texts[ii] = func_mapping_feature(texts[ii], max(1, math.ceil(len(texts[ii]) / self.feat_scale)))
-
-        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat')
-        for ii in range(len(videos)):
-            videos[ii] = func_mapping_feature(videos[ii], max(1, math.ceil(len(videos[ii]) / self.feat_scale)))
+        # Pass scale_factor so each worker compresses before returning,
+        # keeping IPC queue payloads small and avoiding OOM on large datasets.
+        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale)
+        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale)
+        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale)
 
         ## read batch (reduce collater durations)
         # step2: align to batch
