@@ -4,15 +4,16 @@ Cross-Role Attention for MER-Cross.
 Train-test gap: model trained on speaker emotion, tested on listener emotion.
 At test time, audio+text come from the speaker while video comes from the listener.
 
-Strategy:
-  1. Dynamic Modality Dropout — randomly zero audio/text combinations during
-     training so the model learns to predict from video alone.
-  2. Video-Only Test Inference — at test time, zero out audio and text entirely
-     because we KNOW they come from the speaker (wrong person). Video is the only
-     reliable modality at test time.
+Two complementary strategies:
+  1. Dynamic Modality Dropout — randomly zero each modality combination during training
+     so the model learns to predict without reliable audio/text.
+  2. Video CORAL Alignment — penalise the Frobenius distance between the covariance
+     matrices of train and test VIDEO encoder outputs. Video is the Anchor modality
+     (stable across speaker/listener roles); aligning its distribution bridges the
+     domain gap without touching the noisy audio/text Drift modalities.
 
-self.video_only_mode is toggled by main-release.py: False during CV eval
-(same-person data, audio/text are valid), True during test inference.
+Inference is always a clean full pass (all modalities, no masking).
+CORAL and Dynamic Dropout are training-only regularisers.
 '''
 import torch
 import torch.nn as nn
@@ -35,9 +36,10 @@ class CrossRoleAttention(nn.Module):
         self.p_mask_a  = getattr(args, 'p_mask_a',  0.30)
         self.p_mask_t  = getattr(args, 'p_mask_t',  0.20)
         self.p_mask_at = getattr(args, 'p_mask_at', 0.20)
+        self.coral_lambda = getattr(args, 'coral_lambda', 0.1)
 
-        # Toggled by main-release.py before test inference
-        self.video_only_mode = False
+        # Set by main-release.py before training: CPU tensor [N_test, video_dim]
+        self.test_video_feats = None
 
         self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
         self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -48,16 +50,21 @@ class CrossRoleAttention(nn.Module):
         self.fc_out_1      = nn.Linear(hidden_dim, output_dim1)
         self.fc_out_2      = nn.Linear(hidden_dim, output_dim2)
 
+    def _coral(self, source, target):
+        """CORAL loss: mean squared Frobenius norm of covariance difference."""
+        ns, nt = source.size(0), target.size(0)
+        cov_s = (source - source.mean(0)).T @ (source - source.mean(0)) / (ns - 1)
+        cov_t = (target - target.mean(0)).T @ (target - target.mean(0)) / (nt - 1)
+        return ((cov_s - cov_t) ** 2).mean()
+
     def forward(self, batch):
         audio = batch['audios']
         text  = batch['texts']
         video = batch['videos']
+        B     = audio.shape[0]
 
-        if self.video_only_mode:
-            # Test time: audio+text are from speaker (wrong person) → treat as noise
-            audio = torch.zeros_like(audio)
-            text  = torch.zeros_like(text)
-        elif self.training:
+        # Dynamic Modality Dropout: training only, inference is always a clean full pass
+        if self.training:
             r = torch.rand(1).item()
             if r < self.p_mask_a:
                 audio = torch.zeros_like(audio)
@@ -78,6 +85,13 @@ class CrossRoleAttention(nn.Module):
         features = torch.matmul(stacked, attn_w.unsqueeze(2)).squeeze(2)
 
         interloss = torch.zeros(1, device=audio.device).squeeze()
+
+        # Video CORAL: align train video encoder outputs with test video encoder outputs
+        if self.training and self.test_video_feats is not None and self.coral_lambda > 0:
+            idx      = torch.randperm(self.test_video_feats.size(0))[:B]
+            test_v   = self.test_video_feats[idx].to(audio.device)
+            test_v_h = self.video_encoder(test_v)
+            interloss = interloss + self.coral_lambda * self._coral(v_h, test_v_h)
 
         emos_out = self.fc_out_1(features)
         vals_out = self.fc_out_2(features)
