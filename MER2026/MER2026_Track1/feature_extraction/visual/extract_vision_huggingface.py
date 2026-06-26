@@ -101,6 +101,8 @@ if __name__ == '__main__':
     parser.add_argument('--feature_level', type=str, default='UTTERANCE', help='feature level [FRAME or UTTERANCE]')
     parser.add_argument('--videomae_type', type=str, default=None, help='videomae input type: [None or sunlicai]')
     parser.add_argument('--gpu', type=int, default=0, help='gpu id')
+    parser.add_argument('--num_workers', type=int, default=1, help='number of parallel worker processes')
+    parser.add_argument('--worker_id',   type=int, default=0, help='index of this worker (0-based)')
     params = parser.parse_args()
 
     print(f'==> Extracting {params.model_name} embeddings...')
@@ -141,13 +143,14 @@ if __name__ == '__main__':
     model.eval()
 
     # extract embedding video by video
-    vids = os.listdir(face_dir)
+    vids = sorted(os.listdir(face_dir))
+    vids = vids[params.worker_id::params.num_workers]  # interleaved split across workers
     EMBEDDING_DIM = -1
-    print(f'Find total "{len(vids)}" videos.')
+    print(f'Worker {params.worker_id}/{params.num_workers}: processing {len(vids)} videos.')
     for i, vid in enumerate(vids, 1):
         print(f"Processing video '{vid}' ({i}/{len(vids)})...")
-        # save_file = os.path.join(save_dir, f'{vid}.npy')
-        # if os.path.exists(save_file): continue
+        save_file = os.path.join(save_dir, f'{vid}.npy')
+        if os.path.exists(save_file): continue
 
         # forward process [different model has its unique mode, it is hard to unify them as one process]
         # => split into batch to reduce memory usage
