@@ -115,7 +115,7 @@ if __name__ == '__main__':
     else: 
         assert params.videomae_type == 'sunlicai'
         save_dir = os.path.join(config.PATH_TO_FEATURES[params.dataset], f'sunlicai-{model_name}-{params.feature_level[:3]}')
-    if not os.path.exists(save_dir): os.makedirs(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
 
     # load model
     if params.model_name in [CLIP_VIT_BASE, CLIP_VIT_LARGE, DATA2VEC_VISUAL, VIDEOMAE_BASE, VIDEOMAE_LARGE]: # from huggingface
