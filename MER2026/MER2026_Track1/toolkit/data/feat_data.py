@@ -35,9 +35,9 @@ class Data_Feat(Dataset):
         # read datas (reduce __getitem__ durations)
         # Compress and truncate inside each worker to keep IPC payload small.
         # max_seqlen caps outlier-length sequences after scale compression.
-        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=64)
-        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=32)
-        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale, max_seqlen=32)
+        audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale)
+        texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale)
+        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale)
 
         ## read batch (reduce collater durations)
         # step2: align to batch
