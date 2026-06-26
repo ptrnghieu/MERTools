@@ -31,6 +31,7 @@ class get_datasets(Dataset):
             # cross-role transferability
             'cross_role_attention': Data_Feat,
             'two_stage_model': Data_Feat,
+            'grasp_sequence_fusion': Data_Feat,
         }
 
         self.dataset_class = MODEL_DATASET_MAP[args.model]
