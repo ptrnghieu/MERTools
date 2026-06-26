@@ -154,6 +154,8 @@ if __name__ == '__main__':
         with torch.no_grad():
             frames = func_read_frames(face_dir, vid)
             if params.model_name in [CLIP_VIT_BASE, CLIP_VIT_LARGE]:
+                if params.feature_level == 'FRAME':
+                    frames = resample_frames_uniform(frames, nframe=64)
                 frames = [func_opencv_to_image(frame) for frame in frames]
                 inputs = processor(images=frames, return_tensors="pt")['pixel_values']
                 if params.gpu != -1: inputs = inputs.to("cuda")
