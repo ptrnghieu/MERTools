@@ -19,6 +19,7 @@ from .attention import Attention
 from .attention_topn import Attention_TOPN
 from .cross_role_attention import CrossRoleAttention
 from .two_stage_model import TwoStageModel
+from .grasp_sequence_fusion import GRASPSequenceFusion
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -53,6 +54,9 @@ class get_models(nn.Module):
             # cross-role transferability: shuffle audio/text during training
             'cross_role_attention': CrossRoleAttention,
             'two_stage_model': TwoStageModel,
+
+            # video-guided cross-attention fusion for MER-Cross (frm_unalign)
+            'grasp_sequence_fusion': GRASPSequenceFusion,
 
         }
         self.model = MODEL_MAP[args.model](args)

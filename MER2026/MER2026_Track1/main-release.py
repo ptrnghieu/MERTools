@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     # Pre-extract test video features for Video CORAL alignment (CPU tensor, shared across folds)
     _test_video_feats = None
-    if args.model == 'cross_role_attention':
+    if args.model in ['cross_role_attention', 'grasp_sequence_fusion']:
         _vlist = []
         with torch.no_grad():
             for _data in test_loaders[0]:

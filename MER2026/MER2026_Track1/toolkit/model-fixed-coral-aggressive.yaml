@@ -7,3 +7,14 @@ cross_role_attention:
   coral_lambda: 0.1
   grad_clip: -1.0
   lr: 1e-3
+
+grasp_sequence_fusion:
+  hidden_dim: 128
+  dropout: 0.3
+  num_heads: 4
+  p_mask_a:     0.30
+  p_mask_t:     0.20
+  p_mask_at:    0.20
+  coral_lambda: 0.1
+  grad_clip: -1.0
+  lr: 1e-3
