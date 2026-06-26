@@ -162,10 +162,8 @@ if __name__ == '__main__':
                 batches = split_into_batch(inputs, bsize=32)
                 embeddings = []
                 for batch in batches:
-                    out = model.get_image_features(pixel_values=batch)
-                    # newer transformers may return a dataclass instead of a plain tensor
-                    if not isinstance(out, torch.Tensor):
-                        out = out.image_embeds if hasattr(out, 'image_embeds') else out[0]
+                    vision_out = model.vision_model(pixel_values=batch)
+                    out = model.visual_projection(vision_out.pooler_output)  # [batch, proj_dim]
                     embeddings.append(out)
                 embeddings = torch.cat(embeddings, axis=0) # [frames_num, 768]
 
