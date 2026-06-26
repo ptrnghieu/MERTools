@@ -47,14 +47,14 @@ def func_read_one_feat(argv=None, feature_root=None, name=None, processor=None, 
 
 
 def func_read_one_feat_scaled(argv):
-    """Like func_read_one_feat but compresses and optionally truncates before returning.
+    """Like func_read_one_feat but compresses and optionally caps before returning.
     Keeps the IPC queue payload small, avoiding OOM on large datasets."""
     feature_root, name, processor, model_name, scale_factor, max_seqlen = argv
     feat = func_read_one_feat((feature_root, name, processor, model_name))
     if scale_factor > 1:
         feat = func_mapping_feature(feat, max(1, math.ceil(len(feat) / scale_factor)))
     if max_seqlen is not None and len(feat) > max_seqlen:
-        feat = feat[-max_seqlen:]  # keep the most recent frames
+        feat = func_mapping_feature(feat, max_seqlen)  # average-pool to cap; preserves all frames
     return feat
 
 
