@@ -85,16 +85,23 @@ class GRASPSequenceFusion(nn.Module):
         t_proj = self.proj_t(text)   # (B, T_t, H)
         v_proj = self.proj_v(video)  # (B, T_v, H)
 
+        # Safety: if all keys masked for a sample, unmask all to prevent softmax NaN.
+        # This can happen when audio/text features are all-zero (e.g., empty transcription).
+        a_pad_mask_safe = a_pad_mask.clone()
+        a_pad_mask_safe[a_pad_mask.all(dim=1)] = False
+        t_pad_mask_safe = t_pad_mask.clone()
+        t_pad_mask_safe[t_pad_mask.all(dim=1)] = False
+
         # Video-guided cross-attention over Audio
         a_ctx, _ = self.guided_attn_a(
             query=v_proj, key=a_proj, value=a_proj,
-            key_padding_mask=a_pad_mask,
+            key_padding_mask=a_pad_mask_safe,
         )  # (B, T_v, H)
 
         # Video-guided cross-attention over Text
         t_ctx, _ = self.guided_attn_t(
             query=v_proj, key=t_proj, value=t_proj,
-            key_padding_mask=t_pad_mask,
+            key_padding_mask=t_pad_mask_safe,
         )  # (B, T_v, H)
 
         # LayerNorm then temporal mean pooling -> utterance vector
