@@ -112,7 +112,7 @@ class GRASPSequenceFusion(nn.Module):
         fused    = torch.cat([v_out, a_out, t_out], dim=-1)  # (B, T_v, 3H)
         features = fused.mean(dim=1)                          # (B, 3H)
 
-        interloss = torch.zeros(1, device=audio.device).squeeze()
+        interloss = torch.zeros(1, device=audio.device)
 
         # Video CORAL: align train vs test video encoder distributions
         if self.training and self.test_video_feats is not None and self.coral_lambda > 0:

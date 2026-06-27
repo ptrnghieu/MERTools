@@ -5,6 +5,7 @@ import numpy as np
 from omegaconf import OmegaConf
 
 import torch
+import torch.nn as nn
 import torch.optim as optim
 
 from toolkit.utils.loss import *
@@ -40,14 +41,10 @@ def train_or_eval_model(args, model, reg_loss, cls_loss, dataloader, epoch, opti
         batch['emos'] = emos  # available to models that need labels (e.g. SupConLoss)
 
         # forward process
-        # start_time = time.time()
         features, emos_out, vals_out, interloss = model(batch)
-        # duration = time.time() - start_time
-        # macs, params = profile(model, inputs=(batch, ))
-        # print(f"MACs: {macs}, Parameters: {params}, Duration: {duration}; bsize: {len(bnames)}")
 
         # loss calculation
-        loss = interloss
+        loss = interloss.mean()  # mean over DataParallel replicas
         if args.output_dim1 != 0:
             loss = loss + cls_loss(emos_out, emos)
             emo_probs.append(emos_out.data.cpu().numpy())
@@ -61,8 +58,9 @@ def train_or_eval_model(args, model, reg_loss, cls_loss, dataloader, epoch, opti
         # optimize params
         if train:
             loss.backward()
-            if model.model.grad_clip != -1:
-                torch.nn.utils.clip_grad_value_([param for param in model.parameters() if param.requires_grad], model.model.grad_clip)
+            _inner = model.module if hasattr(model, 'module') else model
+            if _inner.model.grad_clip != -1:
+                torch.nn.utils.clip_grad_value_([param for param in model.parameters() if param.requires_grad], _inner.model.grad_clip)
             optimizer.step()
         
         # print
@@ -125,11 +123,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=0, metavar='nw', help='number of workers')
     parser.add_argument('--epochs', type=int, default=100, metavar='E', help='number of epochs')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
-    parser.add_argument('--gpu', default=0, type=int, help='GPU id to use')
+    parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
                         help='enable traverse inference only at test time (not CV eval)')
     args = parser.parse_args()
-    torch.cuda.set_device(args.gpu)
+    gpu_ids = [int(g) for g in str(args.gpu).split(',')]
+    torch.cuda.set_device(gpu_ids[0])
 
 
     print ('====== Params Pre-analysis =======')
@@ -224,8 +223,11 @@ if __name__ == '__main__':
 
         print (f'Step1: build model (each folder has its own model)')
         model = get_models(args).cuda()
+        if len(gpu_ids) > 1:
+            model = nn.DataParallel(model, device_ids=gpu_ids)
+        _inner_model = model.module if hasattr(model, 'module') else model
         if _test_video_feats is not None:
-            model.model.test_video_feats = _test_video_feats  # CPU tensor, moved to GPU per batch
+            _inner_model.model.test_video_feats = _test_video_feats  # CPU tensor, moved to GPU per batch
         reg_loss = MSELoss().cuda()
         cls_loss = CELoss().cuda()
 
