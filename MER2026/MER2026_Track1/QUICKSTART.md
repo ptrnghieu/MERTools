@@ -42,6 +42,7 @@ Repo `hhieupt/mer2026-features` chứa 2 bộ features:
 | `features.zip` | Utterance-level (A+T+V) | HuBERT-Large, MacBERT-Large, CLIP-Large | 1.12 GB |
 | `track1_train.csv` | Training labels | — | 241 kB |
 | `track1_track2_candidate.csv` | Test sample list | — | 400 kB |
+| `track1_label_6way.npz` | Processed label file | — | — |
 
 Tải xuống (cần HuggingFace token nếu repo private):
 
@@ -49,9 +50,8 @@ Tải xuống (cần HuggingFace token nếu repo private):
 pip install huggingface_hub
 
 python3 - <<'EOF'
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import snapshot_download
 
-# Tải tất cả files
 snapshot_download(
     repo_id="hhieupt/mer2026-features",
     repo_type="dataset",
@@ -77,9 +77,9 @@ unzip /root/data/mer2026-hf/clip-vit-large-patch14-FRA.zip    -d $DATA_DIR/featu
 # UTT features
 unzip /root/data/mer2026-hf/features.zip                       -d $DATA_DIR/features/
 
-# CSV files
-cp /root/data/mer2026-hf/track1_train.csv            $DATA_DIR/
-cp /root/data/mer2026-hf/track1_track2_candidate.csv $DATA_DIR/
+# Label và CSV files
+cp /root/data/mer2026-hf/track1_label_6way.npz        $DATA_DIR/
+cp /root/data/mer2026-hf/track1_track2_candidate.csv  $DATA_DIR/
 ```
 
 Sau khi giải nén, cấu trúc thư mục:
@@ -93,7 +93,7 @@ Sau khi giải nén, cấu trúc thư mục:
 │   ├── chinese-hubert-large-UTT/           # từ features.zip
 │   ├── chinese-macbert-large-UTT/
 │   └── clip-vit-large-patch14-UTT/
-├── track1_train.csv
+├── track1_label_6way.npz
 └── track1_track2_candidate.csv
 ```
 
@@ -122,44 +122,7 @@ PATH_TO_FEATURES       = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'features
 
 ---
 
-## Bước 6: Generate file nhãn
-
-Tạo `track1_label_6way.npz` từ các file CSV:
-
-```bash
-python3 - <<'EOF'
-import numpy as np, csv, os
-
-DATA_DIR = '/root/data/mer2026'
-
-def read_csv(path, name_col, label_col=None):
-    names, labels = [], []
-    with open(path) as f:
-        for row in csv.DictReader(f):
-            names.append(row[name_col])
-            labels.append(row.get(label_col, 'neutral') if label_col else 'neutral')
-    return names, labels
-
-train_names, train_emos = read_csv(f'{DATA_DIR}/track1_train.csv', 'name', 'discrete')
-test_names,  _          = read_csv(f'{DATA_DIR}/track1_track2_candidate.csv', 'name')
-test_emos = ['neutral'] * len(test_names)
-
-corpus = {
-    'train': {n: {'emo': e} for n, e in zip(train_names, train_emos)},
-    'test1': {n: {'emo': e} for n, e in zip(test_names,  test_emos)},
-}
-
-save_path = f'{DATA_DIR}/track1_label_6way.npz'
-np.savez_compressed(save_path, train_corpus=corpus['train'], test1_corpus=corpus['test1'])
-print(f'Saved: {save_path}')
-print(f'  Train: {len(train_names)} samples')
-print(f'  Test:  {len(test_names)} samples')
-EOF
-```
-
----
-
-## Bước 7: Training
+## Bước 6: Training
 
 ### Phương án A — UTT features (nhanh, ổn định)
 
@@ -215,7 +178,7 @@ Kết thúc training sẽ lưu file kết quả:
 
 ---
 
-## Bước 8: Tạo file submission
+## Bước 7: Tạo file submission
 
 ```bash
 # Tìm file kết quả test1
