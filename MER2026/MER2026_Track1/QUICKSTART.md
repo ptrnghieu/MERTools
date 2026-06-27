@@ -25,7 +25,7 @@ Hướng dẫn từng bước để chạy training và tạo file submission ch
 
 MER-Cross là task nhận dạng cảm xúc trong hội thoại song thoại (dyadic conversation). Trong mỗi lượt nói:
 
-- **s₁** (speaker): người đang nói — có đầy đủ audio, text, video
+- **s₁** (speaker): người đang nói — có audio, text.
 - **s₂** (listener): người đang nghe — chỉ có video (biểu cảm khuôn mặt)
 
 **Mục tiêu**: dự đoán cảm xúc của **s₂ (listener)** dựa trên audio + text của s₁ và video của s₂.
@@ -47,6 +47,9 @@ MER-Cross là task nhận dạng cảm xúc trong hội thoại song thoại (dy
 |---|---|---|
 | Train | 9,395 | Có (6 lớp) |
 | Test | 20,000 | Không (dự đoán và submit) |
+
+Train trên Individual data (1 người - có đầy đủ 3 modalities)
+Test trên Interlocutor data ( 2 người: speaker có audio+text, listener có visual)
 
 ### Features có sẵn trong repo `hhieupt/mer2026-features`
 
@@ -72,7 +75,7 @@ Repo cung cấp 2 loại features đã được trích xuất sẵn:
 |---|---|
 | `track1_label_6way.npz` | File nhãn đã xử lý cho training code |
 | `track1_train.csv` | Danh sách + nhãn 9,395 mẫu train |
-| `track1_track2_candidate.csv` | Danh sách 20,000 mẫu test cần dự đoán |
+| `track1_track2_candidate.csv` | Danh sách 20,000 mẫu test cần dự đoán gồm cả cho track 1 và track 2 |
 
 ---
 
@@ -229,18 +232,9 @@ DATA_DIR = {
     'MER2026': '/path/to/your/mer2026',   # <-- thay bằng $DATA_DIR ở bước trên
 }
 
-PATH_TO_PRETRAINED_MODELS  = '/path/to/tools'   # không dùng trong pipeline này, có thể để tạm
-PATH_TO_RAW_VIDEO          = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'video')}
-PATH_TO_RAW_AUDIO          = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'audio')}
-PATH_TO_RAW_FACE           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'openface_face')}
-PATH_TO_TRANSCRIPTIONS     = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'subtitle_chieng.csv')}
 PATH_TO_LABEL              = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'track1_label_6way.npz')}
 PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'features')}
 ```
-
-> `PATH_TO_RAW_VIDEO`, `PATH_TO_RAW_AUDIO`, v.v. chỉ cần thiết nếu bạn trích xuất features từ raw data. Nếu dùng features có sẵn từ HuggingFace, các path này không được dùng trong quá trình training.
-
----
 
 ## 8. Training
 
@@ -248,7 +242,7 @@ PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'feat
 
 | Tham số | Ý nghĩa |
 |---|---|
-| `--model` | Kiến trúc model: `cross_role_attention` (thiết kế cho MER-Cross), `attention` (baseline đơn giản) |
+| `--model` | Kiến trúc model:`attention` (baseline đơn giản) |
 | `--feat_type` | `utt` = utterance-level (1 vector/mẫu), `frm_unalign` = frame-level chưa căn chỉnh |
 | `--audio_feature` | Tên thư mục chứa audio features (trong `$DATA_DIR/features/`) |
 | `--text_feature` | Tên thư mục chứa text features |
@@ -311,7 +305,7 @@ epoch:2; metric:emo; train results:0.6691; eval results:0.7369
 - `train results`: WAF (Weighted Average F1) trên tập train của fold hiện tại
 - `eval results`: WAF trên tập validation của fold hiện tại
 
-Training chạy **5-fold cross-validation** — tức là lặp lại 5 lần với phân chia train/val khác nhau. Khi hoàn tất, kết quả được lưu vào:
+Training chạy **5-fold cross-validation** kết quả được lưu vào:
 
 ```
 ./saved-utt-trimodal/result/
@@ -362,29 +356,10 @@ Nén và submit:
 zip answer.zip answer.csv
 ```
 
-Upload file `answer.zip` lên [Codabench](https://www.codabench.org/) tại trang submit của MER2026 Track 1.
+Upload file `answer.zip` lên [Codabench](https://www.codabench.org/competitions/17195/) tại trang submit của MER2026 Track 1.
 
 ---
 
-## 10. Lưu ý và mẹo
-
-**Về 5-fold CV:**
-Training tự động chia tập train (9,395 mẫu) thành 5 phần bằng nhau. Mỗi fold dùng 4/5 để train, 1/5 để validate. Predictions test cuối là trung bình của 5 models.
-
-**Về tốc độ:**
-- UTT features nhanh hơn FRA vì không có chuỗi thời gian
-- `feat_scale` được set tự động: `utt`→1, `frm_align`→6, `frm_unalign`→12 (không cần truyền thủ công)
-- Thêm `--num_workers=4` để tăng tốc data loading nếu có nhiều CPU cores
-
-**Về kết quả không ổn định:**
-Do random initialization và 5-fold split ngẫu nhiên, mỗi lần chạy cho kết quả hơi khác nhau. Để có kết quả ổn định hơn, chạy nhiều lần và average predictions:
-
-```bash
-# Chạy 3 lần độc lập
-for i in 1 2 3; do
-  python main-release.py ... --save_root=./saved-run$i > train_run$i.log 2>&1
-done
-```
 
 **Về lỗi thường gặp:**
 - `ModuleNotFoundError`: cài thêm package bị thiếu bằng `pip install <package>`
