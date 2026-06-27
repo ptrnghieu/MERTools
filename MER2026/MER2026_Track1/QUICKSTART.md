@@ -264,7 +264,7 @@ Nhanh hơn, ổn định hơn, phù hợp để kiểm tra pipeline:
 ```bash
 python main-release.py \
   --dataset=MER2026 \
-  --model=cross_role_attention \
+  --model=attention \
   --feat_type=utt \
   --audio_feature=chinese-hubert-large-UTT \
   --text_feature=chinese-macbert-large-UTT \
@@ -280,12 +280,12 @@ tail -f train_utt.log
 
 ### Phương án B — FRA features (frame-level)
 
-Giữ thông tin temporal, phù hợp cho model có cơ chế attention theo thời gian:
+Giữ thông tin temporal, dùng LSTM encoder để xử lý chuỗi:
 
 ```bash
 python main-release.py \
   --dataset=MER2026 \
-  --model=cross_role_attention \
+  --model=attention \
   --feat_type=frm_unalign \
   --audio_feature=wavlm-large-FRA \
   --text_feature=chinese-roberta-wwm-ext-large-FRA \
