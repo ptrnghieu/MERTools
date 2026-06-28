@@ -228,8 +228,13 @@ Tạo file `config.py` trong thư mục `MER2026_Track1/` (cùng cấp với `ma
 ```python
 import os
 
-PATH_TO_LABEL              = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'track1_label_6way.npz')}
-PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'embeddings/features')} (bỏ features nếu là frame-level embeddings)
+DATA_DIR = {
+    'MER2026Raw': '/path/to/your/mer2026',   # submission.py đọc track_all_candidates.csv từ key này
+    'MER2026':    '/path/to/your/mer2026',
+}
+
+PATH_TO_LABEL    = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'track1_label_6way.npz')}
+PATH_TO_FEATURES = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'embeddings/features')}
 ```
 
 ## 8. Training
@@ -315,6 +320,12 @@ Training chạy **5-fold cross-validation** kết quả được lưu vào:
 
 ## 9. Tạo file submission
 
+`submission.py` của ban tổ chức đọc danh sách tên mẫu từ file `track_all_candidates.csv` (khác tên file tải về). Tạo symlink trước:
+
+```bash
+cp /workspace/mer2026/track1_track2_candidate.csv /workspace/mer2026/track_all_candidates.csv
+```
+
 Tìm file predictions của test set:
 
 ```bash
@@ -332,7 +343,7 @@ python submission.py generate_submission \
   --save_csv=answer.csv
 ```
 
-> **Lưu ý**: `submission.py` đọc thứ tự tên mẫu từ `track1_track2_candidate.csv` (qua `config.py`). Không dùng script tự viết để tránh lệch thứ tự predictions.
+> **Lưu ý**: không dùng script tự viết để tránh lệch thứ tự predictions.
 
 Kiểm tra file:
 
