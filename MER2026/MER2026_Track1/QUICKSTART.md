@@ -320,10 +320,10 @@ Training chạy **5-fold cross-validation** kết quả được lưu vào:
 
 ## 9. Tạo file submission
 
-`submission.py` của ban tổ chức đọc danh sách tên mẫu từ file `track_all_candidates.csv` (khác tên file tải về). Tạo symlink trước:
+`submission.py` của ban tổ chức đọc danh sách tên mẫu từ file `track_all_candidates.csv`. Tạo file này trước:
 
 ```bash
-cp /workspace/mer2026/track1_track2_candidate.csv /workspace/mer2026/track_all_candidates.csv
+cp /path/to/your/mer2026/track1_track2_candidate.csv /path/to/your/mer2026/track_all_candidates.csv
 ```
 
 Tìm file predictions của test set:
