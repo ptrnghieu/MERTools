@@ -172,7 +172,6 @@ EOF
 
 ```bash
 DATA_DIR=/path/to/your/mer2026   # thư mục chứa dữ liệu đã xử lý
-HF_DIR=/path/to/download/mer2026-hf
 mkdir -p $DATA_DIR/embeddings
 ```
 
@@ -229,7 +228,7 @@ Tạo file `config.py` trong thư mục `MER2026_Track1/` (cùng cấp với `ma
 import os
 
 DATA_DIR = {
-    'MER2026Raw': '/path/to/your/mer2026',   # submission.py đọc track_all_candidates.csv từ key này
+    'MER2026Raw': '/path/to/your/mer2026',   # submission.py đọc track_all_candidates.csv từ key này (set cả 2 bằng đường dẫn DATA_DIR bên trên luôn)
     'MER2026':    '/path/to/your/mer2026',
 }
 
@@ -293,6 +292,23 @@ python main-release.py \
 echo "Training started, PID: $!"
 tail -f train_fra.log
 ```
+
+### Troubleshooting: 
+Nếu gặp lỗi
+```
+ModuleNotFoundError: No module named 'torchvision.transforms.functional_tensor'
+```
+Có thể fix bằng
+```
+python3 -c "
+import torchvision, os
+path = os.path.join(os.path.dirname(torchvision.__file__), 'transforms', 'functional_tensor.py')
+with open(path, 'w') as f:
+    f.write('from torchvision.transforms.functional import *\n')
+print('Created:', path)
+"
+```
+Rồi chạy train lại
 
 ### Theo dõi tiến trình
 
