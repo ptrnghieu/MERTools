@@ -41,7 +41,7 @@ class MemoCMTFusion(nn.Module):
     """
     Speaker branch : bidirectional cross-attention on audio + text (MemoCMT-style).
     Listener branch: LSTM + learnable query pooling on video.
-    Fusion          : concat(speaker, listener) → MLP → classifier.
+    Fusion          : Q=listener, K/V=speaker cross-attention + residual → classifier.
     """
 
     def __init__(self, args):
@@ -91,15 +91,17 @@ class MemoCMTFusion(nn.Module):
         # ── Listener branch: learnable query pooling ──────────────────────
         self.listener_pool = LearnableQueryPooling(hidden_dim, num_heads, dropout)
 
-        # ── Fusion + classification head ──────────────────────────────────
-        fused_dim = hidden_dim * 2
-        self.pre_fuse_drop = nn.Dropout(dropout)   # dropout on each branch before concat
-        self.fc1           = nn.Linear(fused_dim, hidden_dim)
-        self.norm_fuse     = nn.LayerNorm(hidden_dim)
-        self.act           = nn.ReLU()
-        self.fuse_drop     = nn.Dropout(dropout)   # dropout after fc1
-        self.fc_out_1      = nn.Linear(hidden_dim, output_dim1)
-        self.fc_out_2      = nn.Linear(hidden_dim, output_dim2)
+        # ── Fusion: Q=listener, K/V=speaker cross-attention ──────────────
+        self.cross_attn_fusion = nn.MultiheadAttention(
+            embed_dim=hidden_dim, num_heads=num_heads,
+            dropout=dropout, batch_first=True,
+        )
+        self.norm_fusion   = nn.LayerNorm(hidden_dim)
+        self.fuse_drop     = nn.Dropout(dropout)
+
+        # ── Classification head ───────────────────────────────────────────
+        self.fc_out_1 = nn.Linear(hidden_dim, output_dim1)
+        self.fc_out_2 = nn.Linear(hidden_dim, output_dim2)
 
     def forward(self, batch):
         audio = batch['audios']
@@ -129,10 +131,12 @@ class MemoCMTFusion(nn.Module):
         # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)            # (B, H)
 
-        # ── Fusion ────────────────────────────────────────────────────────
-        fused    = torch.cat([self.pre_fuse_drop(speaker_feat),
-                              self.pre_fuse_drop(listener_feat)], dim=-1)   # (B, 2H)
-        features = self.fuse_drop(self.act(self.norm_fuse(self.fc1(fused)))) # (B, H)
+        # ── Fusion: Q=listener attends over speaker ───────────────────────
+        q  = listener_feat.unsqueeze(1)   # (B, 1, H)
+        kv = speaker_feat.unsqueeze(1)    # (B, 1, H)
+        attn_out, _ = self.cross_attn_fusion(query=q, key=kv, value=kv)  # (B, 1, H)
+        # residual: giữ nguyên listener, làm giàu bằng speaker context
+        features = self.fuse_drop(self.norm_fusion(attn_out.squeeze(1) + listener_feat))  # (B, H)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
