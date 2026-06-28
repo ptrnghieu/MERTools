@@ -21,6 +21,7 @@ from .cross_role_attention import CrossRoleAttention
 from .two_stage_model import TwoStageModel
 from .grasp_sequence_fusion import GRASPSequenceFusion
 from .speaker_listener_fusion import SpeakerListenerFusion
+from .memocmt_fusion import MemoCMTFusion
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -61,6 +62,9 @@ class get_models(nn.Module):
 
             # speaker (audio+text) → listener (video) cross-attention
             'speaker_listener_fusion': SpeakerListenerFusion,
+
+            # MemoCMT-style bidir cross-attn speaker branch + learnable query pooling listener branch
+            'memocmt_fusion': MemoCMTFusion,
 
         }
         self.model = MODEL_MAP[args.model](args)

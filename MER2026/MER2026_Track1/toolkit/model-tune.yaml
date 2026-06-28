@@ -133,3 +133,9 @@ speaker_listener_fusion:
   dropout: [0.2, 0.3, 0.4, 0.5]
   grad_clip: [-1.0]
   lr: [1e-3, 1e-4]
+
+memocmt_fusion:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]

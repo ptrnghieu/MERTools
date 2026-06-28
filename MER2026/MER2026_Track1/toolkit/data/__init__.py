@@ -33,6 +33,7 @@ class get_datasets(Dataset):
             'two_stage_model': Data_Feat,
             'grasp_sequence_fusion': Data_Feat,
             'speaker_listener_fusion': Data_Feat,
+            'memocmt_fusion': Data_Feat,
         }
 
         self.dataset_class = MODEL_DATASET_MAP[args.model]
