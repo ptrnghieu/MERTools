@@ -6,13 +6,14 @@ from .modules.encoder import MLPEncoder
 class LSTMSeqEncoder(nn.Module):
     def __init__(self, in_size, hidden_size, dropout, num_layers=1):
         super().__init__()
+        self.input_drop = nn.Dropout(dropout)
         self.rnn = nn.LSTM(in_size, hidden_size, num_layers=num_layers,
                            batch_first=True, bidirectional=False)
-        self.dropout = nn.Dropout(dropout)
+        self.output_drop = nn.Dropout(dropout)
 
     def forward(self, x):
-        out, _ = self.rnn(x)
-        return self.dropout(out)
+        out, _ = self.rnn(self.input_drop(x))
+        return self.output_drop(out)
 
 
 class LearnableQueryPooling(nn.Module):
@@ -92,11 +93,13 @@ class MemoCMTFusion(nn.Module):
 
         # ── Fusion + classification head ──────────────────────────────────
         fused_dim = hidden_dim * 2
-        self.fc1      = nn.Linear(fused_dim, hidden_dim)
-        self.act      = nn.ReLU()
-        self.fuse_drop = nn.Dropout(dropout)
-        self.fc_out_1 = nn.Linear(hidden_dim, output_dim1)
-        self.fc_out_2 = nn.Linear(hidden_dim, output_dim2)
+        self.pre_fuse_drop = nn.Dropout(dropout)   # dropout on each branch before concat
+        self.fc1           = nn.Linear(fused_dim, hidden_dim)
+        self.norm_fuse     = nn.LayerNorm(hidden_dim)
+        self.act           = nn.ReLU()
+        self.fuse_drop     = nn.Dropout(dropout)   # dropout after fc1
+        self.fc_out_1      = nn.Linear(hidden_dim, output_dim1)
+        self.fc_out_2      = nn.Linear(hidden_dim, output_dim2)
 
     def forward(self, batch):
         audio = batch['audios']
@@ -127,8 +130,9 @@ class MemoCMTFusion(nn.Module):
         listener_feat = self.listener_pool(h_v)            # (B, H)
 
         # ── Fusion ────────────────────────────────────────────────────────
-        fused    = torch.cat([speaker_feat, listener_feat], dim=-1)  # (B, 2H)
-        features = self.fuse_drop(self.act(self.fc1(fused)))          # (B, H)
+        fused    = torch.cat([self.pre_fuse_drop(speaker_feat),
+                              self.pre_fuse_drop(listener_feat)], dim=-1)   # (B, 2H)
+        features = self.fuse_drop(self.act(self.norm_fuse(self.fc1(fused)))) # (B, H)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)

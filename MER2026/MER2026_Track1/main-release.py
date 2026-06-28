@@ -122,6 +122,8 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32, metavar='BS', help='batch size [deal with OOM]')
     parser.add_argument('--num_workers', type=int, default=0, metavar='nw', help='number of workers')
     parser.add_argument('--epochs', type=int, default=100, metavar='E', help='number of epochs')
+    parser.add_argument('--patience', type=int, default=-1, help='early stopping patience (-1 = disabled)')
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'], help='optimizer type')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -232,7 +234,8 @@ if __name__ == '__main__':
         cls_loss = CELoss().cuda()
 
         if args.lr_adjust == 'case1':
-            optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
+            opt_cls = optim.AdamW if args.optimizer == 'adamw' else optim.Adam
+            optimizer = opt_cls(model.parameters(), lr=args.lr, weight_decay=args.l2)
         elif args.lr_adjust == 'case2':
             assert args.model == 'e2e_model', 'lr_adjust=case2 only support for e2e_model'
             print ('set different learning rates for different layers')
@@ -246,6 +249,8 @@ if __name__ == '__main__':
         print (f'Step2: training (multiple epoches)')
         whole_store = []
         whole_metrics = []
+        best_eval_metric = -np.inf
+        no_improve_count = 0
         for epoch in range(args.epochs):
 
             epoch_store = {}
@@ -261,6 +266,16 @@ if __name__ == '__main__':
             eval_metric  = gain_metric_from_results(eval_results,  args.metric_name)
             whole_metrics.append(eval_metric)
             print ('epoch:%d; metric:%s; train results:%.4f; eval results:%.4f' %(epoch+1, args.metric_name, train_metric, eval_metric))
+
+            ## early stopping
+            if eval_metric > best_eval_metric:
+                best_eval_metric = eval_metric
+                no_improve_count = 0
+            else:
+                no_improve_count += 1
+            if args.patience > 0 and no_improve_count >= args.patience:
+                print(f'Early stopping at epoch {epoch+1} (no improvement for {args.patience} epochs)')
+                break
 
             ## testing and saving
             for jj, test_loader in enumerate(test_loaders):
