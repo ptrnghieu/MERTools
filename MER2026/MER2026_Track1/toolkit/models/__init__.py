@@ -20,6 +20,7 @@ from .attention_topn import Attention_TOPN
 from .cross_role_attention import CrossRoleAttention
 from .two_stage_model import TwoStageModel
 from .grasp_sequence_fusion import GRASPSequenceFusion
+from .speaker_listener_fusion import SpeakerListenerFusion
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -57,6 +58,9 @@ class get_models(nn.Module):
 
             # video-guided cross-attention fusion for MER-Cross (frm_unalign)
             'grasp_sequence_fusion': GRASPSequenceFusion,
+
+            # speaker (audio+text) → listener (video) cross-attention
+            'speaker_listener_fusion': SpeakerListenerFusion,
 
         }
         self.model = MODEL_MAP[args.model](args)
