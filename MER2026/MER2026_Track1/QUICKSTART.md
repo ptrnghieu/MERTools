@@ -67,7 +67,7 @@ Repo cung cấp 2 loại features đã được trích xuất sẵn:
 
 | Nội dung | Models | Kích thước |
 |---|---|---|
-| `features.zip` (audio + text + video) | Chinese HuBERT-Large, Chinese MacBERT-Large, CLIP-ViT-Large | 1.12 GB |
+| `features.zip` (audio + text + video) | Chinese HuBERT-Large, Chinese MacBERT-Large, CLIP-ViT-Large,... | 1.12 GB |
 
 **File nhãn và metadata:**
 
@@ -107,6 +107,7 @@ cd MERTools/MER2026/MER2026_Track1
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 pip install numpy scikit-learn omegaconf pandas tqdm matplotlib openai fire huggingface_hub
+pip install opencv-python-headless pytorchvideo ftfy timm einops decord regex iopath
 ```
 
 > Thay `cu118` bằng phiên bản CUDA phù hợp với máy bạn (cu121, cu124, v.v.). Kiểm tra phiên bản CUDA bằng `nvidia-smi`.
@@ -172,7 +173,7 @@ EOF
 ```bash
 DATA_DIR=/path/to/your/mer2026   # thư mục chứa dữ liệu đã xử lý
 HF_DIR=/path/to/download/mer2026-hf
-mkdir -p $DATA_DIR/features
+mkdir -p $DATA_DIR/embeddings
 ```
 
 Copy file nhãn và metadata:
@@ -186,25 +187,25 @@ Giải nén features (chọn loại bạn cần):
 
 ```bash
 # UTT features (nhỏ, nhanh, phù hợp để bắt đầu)
-unzip $HF_DIR/features.zip -d $DATA_DIR/features/
+unzip $HF_DIR/features.zip -d $DATA_DIR/embeddings/
 
 # FRA features (lớn hơn, nhiều thông tin hơn)
-unzip $HF_DIR/wavlm-large-FRA.zip                    -d $DATA_DIR/features/
-unzip $HF_DIR/chinese-roberta-wwm-ext-large-FRA.zip  -d $DATA_DIR/features/
-unzip $HF_DIR/clip-vit-large-patch14-FRA.zip         -d $DATA_DIR/features/
+unzip $HF_DIR/wavlm-large-FRA.zip                    -d $DATA_DIR/embeddings/
+unzip $HF_DIR/chinese-roberta-wwm-ext-large-FRA.zip  -d $DATA_DIR/embeddings/
+unzip $HF_DIR/clip-vit-large-patch14-FRA.zip         -d $DATA_DIR/embeddings/
 ```
 
 Kiểm tra cấu trúc thư mục sau khi giải nén:
 
 ```
-$DATA_DIR/
+$DATA_DIR/embeddings/
 ├── features/
 │   ├── chinese-hubert-large-UTT/           # audio UTT (từ features.zip)
 │   ├── chinese-macbert-large-UTT/          # text UTT (từ features.zip)
 │   ├── clip-vit-large-patch14-UTT/         # video UTT (từ features.zip)
-│   ├── wavlm-large-FRA/                    # audio FRA
-│   ├── chinese-roberta-wwm-ext-large-FRA/  # text FRA
-│   └── clip-vit-large-patch14-FRA/         # video FRA
+├── wavlm-large-FRA/                    # audio FRA
+├── chinese-roberta-wwm-ext-large-FRA/  # text FRA
+├── clip-vit-large-patch14-FRA/         # video FRA
 ├── track1_label_6way.npz
 └── track1_track2_candidate.csv
 ```
@@ -227,13 +228,8 @@ Tạo file `config.py` trong thư mục `MER2026_Track1/` (cùng cấp với `ma
 ```python
 import os
 
-# Đường dẫn đến thư mục dữ liệu (thay đổi theo máy của bạn)
-DATA_DIR = {
-    'MER2026': '/path/to/your/mer2026',   # <-- thay bằng $DATA_DIR ở bước trên
-}
-
 PATH_TO_LABEL              = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'track1_label_6way.npz')}
-PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'features')}
+PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'embeddings/features')} (bỏ features nếu là frame-level embeddings)
 ```
 
 ## 8. Training
@@ -244,7 +240,7 @@ PATH_TO_FEATURES           = {'MER2026': os.path.join(DATA_DIR['MER2026'], 'feat
 |---|---|
 | `--model` | Kiến trúc model:`attention` (baseline đơn giản) |
 | `--feat_type` | `utt` = utterance-level (1 vector/mẫu), `frm_unalign` = frame-level chưa căn chỉnh |
-| `--audio_feature` | Tên thư mục chứa audio features (trong `$DATA_DIR/features/`) |
+| `--audio_feature` | Tên thư mục chứa audio features |
 | `--text_feature` | Tên thư mục chứa text features |
 | `--video_feature` | Tên thư mục chứa video features |
 | `--epochs` | Số epoch training mỗi fold |
@@ -274,7 +270,7 @@ tail -f train_utt.log
 
 ### Phương án B — FRA features (frame-level)
 
-Giữ thông tin temporal, dùng LSTM encoder để xử lý chuỗi:
+Giữ thông tin temporal:
 
 ```bash
 python main-release.py \
