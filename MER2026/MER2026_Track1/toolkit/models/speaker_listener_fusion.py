@@ -1,12 +1,30 @@
 import torch
 import torch.nn as nn
-from .modules.encoder import MLPEncoder, LSTMEncoder
+from .modules.encoder import MLPEncoder
+
+
+class LSTMSeqEncoder(nn.Module):
+    """LSTM encoder that returns the full sequence (B, T, hidden) instead of final state."""
+
+    def __init__(self, in_size, hidden_size, dropout, num_layers=1):
+        super().__init__()
+        self.rnn = nn.LSTM(in_size, hidden_size, num_layers=num_layers,
+                           batch_first=True, bidirectional=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        # x: (B, T, in_size)
+        out, _ = self.rnn(x)       # out: (B, T, hidden_size)
+        return self.dropout(out)
 
 
 class SpeakerListenerFusion(nn.Module):
     """
     Two separate encoders for speaker (audio+text) and listener (video),
     fused via cross-attention: listener video = Q, speaker audio+text = K, V.
+
+    - UTT features: single vector per sample → cross-attention over 2 speaker tokens
+    - FRA features: full sequence → cross-attention preserves temporal info
     """
 
     def __init__(self, args):
@@ -22,10 +40,12 @@ class SpeakerListenerFusion(nn.Module):
         self.grad_clip = args.grad_clip
 
         feat_type = getattr(args, 'feat_type', 'utt')
+        self.feat_type = feat_type
+
         if feat_type in ['frm_align', 'frm_unalign']:
-            self.audio_encoder = LSTMEncoder(audio_dim, hidden_dim, dropout)
-            self.text_encoder  = LSTMEncoder(text_dim,  hidden_dim, dropout)
-            self.video_encoder = LSTMEncoder(video_dim, hidden_dim, dropout)
+            self.audio_encoder = LSTMSeqEncoder(audio_dim, hidden_dim, dropout)
+            self.text_encoder  = LSTMSeqEncoder(text_dim,  hidden_dim, dropout)
+            self.video_encoder = LSTMSeqEncoder(video_dim, hidden_dim, dropout)
         else:
             self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
             self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
@@ -47,27 +67,28 @@ class SpeakerListenerFusion(nn.Module):
         text  = batch['texts']
         video = batch['videos']
 
-        # Encode: all outputs are (B, hidden_dim)
-        h_a = self.audio_encoder(audio)
-        h_t = self.text_encoder(text)
-        h_v = self.video_encoder(video)
+        h_a = self.audio_encoder(audio)   # (B, T_a, hidden) or (B, hidden)
+        h_t = self.text_encoder(text)     # (B, T_t, hidden) or (B, hidden)
+        h_v = self.video_encoder(video)   # (B, T_v, hidden) or (B, hidden)
 
-        # Add sequence dimension for MultiheadAttention
-        h_a = h_a.unsqueeze(1)   # (B, 1, hidden_dim)
-        h_t = h_t.unsqueeze(1)   # (B, 1, hidden_dim)
-        h_v = h_v.unsqueeze(1)   # (B, 1, hidden_dim)  — Q
-
-        # Speaker context: audio + text as 2 tokens
-        speaker_kv = torch.cat([h_a, h_t], dim=1)  # (B, 2, hidden_dim)
+        if self.feat_type in ['frm_align', 'frm_unalign']:
+            # Full sequences: cat audio and text along time dim as speaker context
+            speaker_kv = torch.cat([h_a, h_t], dim=1)  # (B, T_a+T_t, hidden)
+            query      = h_v                             # (B, T_v, hidden)
+        else:
+            # Single vectors: add seq dim
+            speaker_kv = torch.cat([h_a.unsqueeze(1), h_t.unsqueeze(1)], dim=1)  # (B, 2, hidden)
+            query      = h_v.unsqueeze(1)                                          # (B, 1, hidden)
 
         # Cross-attention: listener video queries speaker audio+text
         attn_out, _ = self.cross_attn(
-            query=h_v,
+            query=query,
             key=speaker_kv,
             value=speaker_kv,
-        )  # (B, 1, hidden_dim)
+        )  # same shape as query
 
-        features = attn_out.squeeze(1)  # (B, hidden_dim)
+        # Pool over time
+        features = attn_out.mean(dim=1)  # (B, hidden)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
