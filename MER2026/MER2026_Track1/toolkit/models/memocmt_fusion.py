@@ -57,7 +57,7 @@ class MemoCMTFusion(nn.Module):
         self.grad_clip = args.grad_clip
 
         self.feat_type       = getattr(args, 'feat_type', 'utt')
-        self.speaker_drop_p  = getattr(args, 'speaker_drop_p', 0.4)
+        self.speaker_drop_p  = getattr(args, 'speaker_drop_p', 0.2)
         num_heads = max(1, hidden_dim // 64)
 
         # ── Encoders ─────────────────────────────────────────────────────
