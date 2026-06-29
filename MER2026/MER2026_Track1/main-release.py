@@ -263,6 +263,10 @@ if __name__ == '__main__':
 
             epoch_store = {}
 
+            ## update epoch counter for curriculum augmentation
+            _inner = model.module if hasattr(model, 'module') else model
+            _inner.model.current_epoch = epoch
+
             ## training and validation
             train_results = train_or_eval_model(args, model, reg_loss, cls_loss, train_loader, epoch=epoch, optimizer=optimizer, train=True )
             eval_results  = train_or_eval_model(args, model, reg_loss, cls_loss, eval_loader,  epoch=epoch, optimizer=None,      train=False)

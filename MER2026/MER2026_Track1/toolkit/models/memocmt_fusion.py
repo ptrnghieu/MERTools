@@ -80,9 +80,11 @@ class MemoCMTFusion(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        self.feat_type      = getattr(args, 'feat_type', 'utt')
-        self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.5)
+        self.feat_type      = getattr(args, 'feat_type',      'utt')
+        self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.2)
         self.cross_pair_p   = getattr(args, 'cross_pair_p',   0.5)
+        self.use_curriculum = getattr(args, 'use_curriculum', True)
+        self.current_epoch  = 0
 
         num_heads = max(1, hidden_dim // 64)
 
@@ -186,7 +188,12 @@ class MemoCMTFusion(nn.Module):
         speaker_feat = self.speaker_drop(speaker_seq.mean(dim=1))  # (B, H)
 
         # ── ATOMIC-guided cross-pair augmentation (training only) ──────────
-        if self.training and torch.rand(1).item() < self.cross_pair_p:
+        if self.use_curriculum:
+            ep = self.current_epoch
+            p = 0.2 if ep < 10 else (0.4 if ep < 30 else self.cross_pair_p)
+        else:
+            p = self.cross_pair_p
+        if self.training and torch.rand(1).item() < p:
             speaker_feat = self._compatible_pairing(speaker_feat, batch['emos'])
 
         # ── Modality dropout (training only) ──────────────────────────────
