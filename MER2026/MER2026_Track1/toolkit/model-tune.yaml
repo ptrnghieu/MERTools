@@ -139,3 +139,8 @@ memocmt_fusion:
   dropout: [0.2, 0.3, 0.4, 0.5]
   grad_clip: [-1.0]
   lr: [1e-3, 1e-4]
+  lambda_inv: [0.05]
+  lambda_dec: [0.05]
+  lambda_rec: [0.05]
+  alpha_dec: [0.1]
+  noise_std: [0.1]
