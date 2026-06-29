@@ -22,6 +22,7 @@ from .two_stage_model import TwoStageModel
 from .grasp_sequence_fusion import GRASPSequenceFusion
 from .speaker_listener_fusion import SpeakerListenerFusion
 from .memocmt_fusion import MemoCMTFusion
+from .memocmt_v1 import MemoCMTV1
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -65,6 +66,7 @@ class get_models(nn.Module):
 
             # MemoCMT-style bidir cross-attn speaker branch + learnable query pooling listener branch
             'memocmt_fusion': MemoCMTFusion,
+            'memocmt_v1':     MemoCMTV1,
 
         }
         self.model = MODEL_MAP[args.model](args)
