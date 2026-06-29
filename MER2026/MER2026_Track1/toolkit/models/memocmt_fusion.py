@@ -56,7 +56,8 @@ class MemoCMTFusion(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        self.feat_type = getattr(args, 'feat_type', 'utt')
+        self.feat_type       = getattr(args, 'feat_type', 'utt')
+        self.speaker_drop_p  = getattr(args, 'speaker_drop_p', 0.4)
         num_heads = max(1, hidden_dim // 64)
 
         # ── Encoders ─────────────────────────────────────────────────────
@@ -127,6 +128,10 @@ class MemoCMTFusion(nn.Module):
 
         speaker_seq  = torch.cat([a2t, t2a], dim=1)       # (B, T_a+T_t, H)
         speaker_feat = self.speaker_drop(speaker_seq.mean(dim=1))  # (B, H)
+
+        # modality dropout: zero out entire speaker branch with p=speaker_drop_p
+        if self.training and torch.rand(1).item() < self.speaker_drop_p:
+            speaker_feat = torch.zeros_like(speaker_feat)
 
         # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)            # (B, H)
