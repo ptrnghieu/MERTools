@@ -190,7 +190,12 @@ class MemoCMTFusion(nn.Module):
         # ── ATOMIC-guided cross-pair augmentation (training only) ──────────
         if self.use_curriculum:
             ep = self.current_epoch
-            p = 0.2 if ep < 10 else (0.4 if ep < 30 else self.cross_pair_p)
+            if ep <= 20:
+                p = 0.2 * ep / 20                          # 0.0 → 0.2
+            elif ep <= 60:
+                p = 0.2 + 0.3 * (ep - 20) / 40            # 0.2 → 0.5
+            else:
+                p = 0.5
         else:
             p = self.cross_pair_p
         if self.training and torch.rand(1).item() < p:

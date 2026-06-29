@@ -125,6 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--patience', type=int, default=-1, help='early stopping patience (-1 = disabled)')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'], help='optimizer type')
     parser.add_argument('--use_class_weight', action='store_true', default=False, help='use inverse-frequency class weights in CE loss')
+    parser.add_argument('--use_lr_scheduler', action='store_true', default=False, help='use CosineAnnealingLR scheduler')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -244,7 +245,9 @@ if __name__ == '__main__':
         if args.lr_adjust == 'case1':
             opt_cls = optim.AdamW if args.optimizer == 'adamw' else optim.Adam
             optimizer = opt_cls(model.parameters(), lr=args.lr, weight_decay=args.l2)
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01) if args.use_lr_scheduler else None
         elif args.lr_adjust == 'case2':
+            scheduler = None
             assert args.model == 'e2e_model', 'lr_adjust=case2 only support for e2e_model'
             print ('set different learning rates for different layers')
             optimizer = optim.Adam([{'params': model.model.pretrain_model.parameters(), 'lr': args.lr/10},
@@ -269,6 +272,8 @@ if __name__ == '__main__':
 
             ## training and validation
             train_results = train_or_eval_model(args, model, reg_loss, cls_loss, train_loader, epoch=epoch, optimizer=optimizer, train=True )
+            if scheduler is not None:
+                scheduler.step()
             eval_results  = train_or_eval_model(args, model, reg_loss, cls_loss, eval_loader,  epoch=epoch, optimizer=None,      train=False)
             func_update_storage(inputs=eval_results, prefix='eval', outputs=epoch_store)
             # print (epoch_store.keys()) # debug
