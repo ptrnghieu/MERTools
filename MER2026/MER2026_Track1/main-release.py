@@ -127,6 +127,7 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'], help='optimizer type')
     parser.add_argument('--use_class_weight', action='store_true', default=False, help='use inverse-frequency class weights in CE loss')
     parser.add_argument('--use_lr_scheduler', action='store_true', default=False, help='use CosineAnnealingLR scheduler')
+    parser.add_argument('--label_smoothing', type=float, default=0.0, help='label smoothing factor (0=disabled)')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -240,6 +241,8 @@ if __name__ == '__main__':
             _counts = np.where(_counts == 0, 1, _counts)
             _w = torch.tensor(len(_labels) / (args.output_dim1 * _counts), dtype=torch.float).cuda()
             cls_loss = CELoss(weight=_w).cuda()
+        elif args.label_smoothing > 0:
+            cls_loss = LabelSmoothingCELoss(smoothing=args.label_smoothing).cuda()
         else:
             cls_loss = CELoss().cuda()
 
@@ -307,6 +310,19 @@ if __name__ == '__main__':
         print (f'Step3: saving and testing on the {ii+1} folder')
         best_index = np.argmax(np.array(whole_metrics))
         folder_save.append(whole_store[best_index])
+
+        # print confusion matrix for best eval epoch
+        _emo_probs  = whole_store[best_index].get('eval_emo_probs',  None)
+        _emo_labels = whole_store[best_index].get('eval_emo_labels', None)
+        if _emo_probs is not None and len(_emo_probs) > 0:
+            from sklearn.metrics import confusion_matrix as _cm
+            _preds = np.argmax(_emo_probs, axis=1)
+            _labels_str = ['neu', 'ang', 'hap', 'sad', 'wor', 'sur']
+            print(f'\nConfusion Matrix (fold {ii+1}, best epoch {best_index+1}):')
+            print('        ' + '  '.join(f'{l:>4}' for l in _labels_str))
+            for _i, _row in enumerate(_cm(_emo_labels.astype(int), _preds, labels=list(range(6)))):
+                print(f'  {_labels_str[_i]:>4}  ' + '  '.join(f'{v:>4}' for v in _row))
+            print()
         end_time = time.time()
         duration = end_time - start_time
         folder_duration.append(duration)

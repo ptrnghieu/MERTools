@@ -15,6 +15,22 @@ class CELoss(nn.Module):
         loss = self.loss(pred, target) / len(pred)
         return loss
 
+
+class LabelSmoothingCELoss(nn.Module):
+
+    def __init__(self, smoothing=0.1):
+        super().__init__()
+        self.smoothing = smoothing
+
+    def forward(self, pred, target):
+        n_classes = pred.size(1)
+        log_prob = F.log_softmax(pred, dim=1)           # (N, C)
+        target = target.long()
+        nll = F.nll_loss(log_prob, target, reduction='sum')
+        smooth = -log_prob.sum(dim=1).sum()             # uniform over all classes
+        loss = (1 - self.smoothing) * nll + self.smoothing * smooth / n_classes
+        return loss / len(pred)
+
 # supervised contrastive loss (Khosla et al. 2020)
 class SupConLoss(nn.Module):
 
