@@ -124,6 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=100, metavar='E', help='number of epochs')
     parser.add_argument('--patience', type=int, default=-1, help='early stopping patience (-1 = disabled)')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'], help='optimizer type')
+    parser.add_argument('--use_class_weight', action='store_true', default=False, help='use inverse-frequency class weights in CE loss')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -231,7 +232,14 @@ if __name__ == '__main__':
         if _test_video_feats is not None:
             _inner_model.model.test_video_feats = _test_video_feats  # CPU tensor, moved to GPU per batch
         reg_loss = MSELoss().cuda()
-        cls_loss = CELoss().cuda()
+        if args.use_class_weight:
+            _labels = np.concatenate([data[1].numpy() for data in train_loader])
+            _counts = np.bincount(_labels.astype(int), minlength=args.output_dim1).astype(float)
+            _counts = np.where(_counts == 0, 1, _counts)
+            _w = torch.tensor(len(_labels) / (args.output_dim1 * _counts), dtype=torch.float).cuda()
+            cls_loss = CELoss(weight=_w).cuda()
+        else:
+            cls_loss = CELoss().cuda()
 
         if args.lr_adjust == 'case1':
             opt_cls = optim.AdamW if args.optimizer == 'adamw' else optim.Adam

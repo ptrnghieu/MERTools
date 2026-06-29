@@ -5,9 +5,9 @@ import torch.nn.functional as F
 # classification loss
 class CELoss(nn.Module):
 
-    def __init__(self):
+    def __init__(self, weight=None):
         super(CELoss, self).__init__()
-        self.loss = nn.NLLLoss(reduction='sum')
+        self.loss = nn.NLLLoss(reduction='sum', weight=weight)
 
     def forward(self, pred, target):
         pred = F.log_softmax(pred, 1) # [n_samples, n_classes]
