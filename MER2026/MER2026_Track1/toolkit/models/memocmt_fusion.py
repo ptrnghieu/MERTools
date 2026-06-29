@@ -38,7 +38,9 @@ class MemoCMTFusion(nn.Module):
     """
     Speaker branch : LSTM → bidir cross-attention (audio↔text) → mean pool
     Listener branch: LSTM → LearnableQueryPooling
-    Fusion         : Q=listener, K/V=speaker cross-attention + residual
+    Fusion         : Cross-modal gating — speaker generates gate for listener
+                     gate = sigmoid(LayerNorm(Linear(speaker_feat)))
+                     features = listener_feat + listener_feat ⊙ gate  (residual)
     """
 
     def __init__(self, args):
@@ -88,11 +90,9 @@ class MemoCMTFusion(nn.Module):
         # ── Listener: learnable query pooling ─────────────────────────────
         self.listener_pool = LearnableQueryPooling(hidden_dim, num_heads, dropout)
 
-        # ── Fusion ────────────────────────────────────────────────────────
-        self.cross_attn_fusion = nn.MultiheadAttention(
-            embed_dim=hidden_dim, num_heads=num_heads,
-            dropout=dropout, batch_first=True,
-        )
+        # ── Fusion: cross-modal gating ────────────────────────────────────
+        self.gate_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.gate_norm = nn.LayerNorm(hidden_dim)
         self.norm_fusion = nn.LayerNorm(hidden_dim)
         self.fuse_drop   = nn.Dropout(dropout)
 
@@ -132,13 +132,13 @@ class MemoCMTFusion(nn.Module):
         # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)                # (B, H)
 
-        # ── Fusion: Q=listener, K/V=speaker + residual ────────────────────
-        q  = listener_feat.unsqueeze(1)   # (B, 1, H)
-        kv = speaker_feat.unsqueeze(1)    # (B, 1, H)
-        attn_out, _ = self.cross_attn_fusion(query=q, key=kv, value=kv)
+        # ── Fusion: cross-modal gating ────────────────────────────────────
+        # LayerNorm before sigmoid → stable gate, avoids collapse to 0
+        gate = torch.sigmoid(self.gate_norm(self.gate_proj(speaker_feat)))  # (B, H)
+        # residual: listener_feat preserved even if gate is uninformative
         features = self.fuse_drop(
-            self.norm_fusion(attn_out.squeeze(1) + listener_feat)
-        )                                                       # (B, H)
+            self.norm_fusion(listener_feat + listener_feat * gate)
+        )                                                                    # (B, H)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
