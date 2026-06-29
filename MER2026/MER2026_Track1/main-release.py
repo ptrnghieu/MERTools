@@ -123,6 +123,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=0, metavar='nw', help='number of workers')
     parser.add_argument('--epochs', type=int, default=100, metavar='E', help='number of epochs')
     parser.add_argument('--patience', type=int, default=-1, help='early stopping patience (-1 = disabled)')
+    parser.add_argument('--patience_start', type=int, default=0, help='epoch from which early stopping is active')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamw'], help='optimizer type')
     parser.add_argument('--use_class_weight', action='store_true', default=False, help='use inverse-frequency class weights in CE loss')
     parser.add_argument('--use_lr_scheduler', action='store_true', default=False, help='use CosineAnnealingLR scheduler')
@@ -290,7 +291,7 @@ if __name__ == '__main__':
                 no_improve_count = 0
             else:
                 no_improve_count += 1
-            if args.patience > 0 and no_improve_count >= args.patience:
+            if args.patience > 0 and epoch >= args.patience_start and no_improve_count >= args.patience:
                 print(f'Early stopping at epoch {epoch+1} (no improvement for {args.patience} epochs)')
                 break
 
