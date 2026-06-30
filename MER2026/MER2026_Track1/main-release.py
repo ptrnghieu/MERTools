@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import argparse
 import numpy as np
 from omegaconf import OmegaConf
@@ -132,9 +133,15 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
                         help='enable traverse inference only at test time (not CV eval)')
+    parser.add_argument('--seed', type=int, default=42, help='random seed for fold split and model init (for controlled comparisons)')
     args = parser.parse_args()
     gpu_ids = [int(g) for g in str(args.gpu).split(',')]
     torch.cuda.set_device(gpu_ids[0])
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
 
 
     print ('====== Params Pre-analysis =======')
