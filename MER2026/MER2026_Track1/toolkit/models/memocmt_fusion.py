@@ -16,29 +16,28 @@ class LSTMSeqEncoder(nn.Module):
         return self.output_drop(out)
 
 
-class MultiQueryAttentionPooling(nn.Module):
-    """Multiple learnable queries attend over sequence, then mean-aggregated → (B, H)."""
+class LearnableQueryPooling(nn.Module):
+    """Single learnable query attends over sequence → (B, H)."""
 
-    def __init__(self, hidden_dim, num_heads, dropout, num_queries=4):
+    def __init__(self, hidden_dim, num_heads, dropout):
         super().__init__()
-        self.queries = nn.Parameter(torch.zeros(1, num_queries, hidden_dim))
-        nn.init.normal_(self.queries, std=0.02)
+        self.query = nn.Parameter(torch.zeros(1, 1, hidden_dim))
+        nn.init.normal_(self.query, std=0.02)
         self.attn = nn.MultiheadAttention(
             embed_dim=hidden_dim, num_heads=num_heads,
             dropout=dropout, batch_first=True,
         )
-        self.agg_drop = nn.Dropout(dropout)
 
     def forward(self, x):
-        q = self.queries.expand(x.size(0), -1, -1)   # (B, Q, H)
-        out, _ = self.attn(query=q, key=x, value=x)   # (B, Q, H)
-        return self.agg_drop(out.mean(dim=1))          # (B, H)
+        q = self.query.expand(x.size(0), -1, -1)    # (B, 1, H)
+        out, _ = self.attn(query=q, key=x, value=x)  # (B, 1, H)
+        return out.squeeze(1)                         # (B, H)
 
 
 class MemoCMTFusion(nn.Module):
     """
     Speaker branch : LSTM → bidir cross-attention (audio↔text) → mean pool
-    Listener branch: LSTM → multi-query attention pooling
+    Listener branch: LSTM → LearnableQueryPooling
     Fusion         : Q=listener, K/V=speaker cross-attention + residual
     """
 
@@ -86,8 +85,8 @@ class MemoCMTFusion(nn.Module):
 
         self.speaker_drop = nn.Dropout(dropout)
 
-        # ── Listener: multi-query attention pooling ────────────────────────
-        self.listener_pool = MultiQueryAttentionPooling(hidden_dim, num_heads, dropout, num_queries=4)
+        # ── Listener: learnable query pooling ─────────────────────────────
+        self.listener_pool = LearnableQueryPooling(hidden_dim, num_heads, dropout)
 
         # ── Fusion ────────────────────────────────────────────────────────
         self.cross_attn_fusion = nn.MultiheadAttention(
@@ -130,7 +129,7 @@ class MemoCMTFusion(nn.Module):
         if self.training and self.speaker_drop_p > 0 and torch.rand(1).item() < self.speaker_drop_p:
             speaker_feat = torch.zeros_like(speaker_feat)
 
-        # ── Listener: multi-query attention pooling ────────────────────────
+        # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)                # (B, H)
 
         # ── Fusion: Q=listener, K/V=speaker + residual ────────────────────
