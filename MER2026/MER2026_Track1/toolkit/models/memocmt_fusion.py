@@ -38,13 +38,7 @@ class MemoCMTFusion(nn.Module):
     """
     Speaker branch : LSTM → bidir cross-attention (audio↔text) → mean pool
     Listener branch: LSTM → LearnableQueryPooling
-    Fusion         : Contrastive discrepancy — project speaker into listener
-                     space (linear, no nonlinearity) and take the residual
-                     diff = listener_feat - Linear(speaker_feat)
-                     features = cat(listener_feat, diff)
-                     The diff highlights where listener's reaction departs
-                     from the speaker's signal — in MER-Cross that departure
-                     carries the emotion, not the speaker/listener agreement.
+    Fusion         : Q=listener, K/V=speaker cross-attention + residual
     """
 
     def __init__(self, args):
@@ -94,14 +88,17 @@ class MemoCMTFusion(nn.Module):
         # ── Listener: learnable query pooling ─────────────────────────────
         self.listener_pool = LearnableQueryPooling(hidden_dim, num_heads, dropout)
 
-        # ── Fusion: contrastive discrepancy ────────────────────────────────
-        self.speaker_proj = nn.Linear(hidden_dim, hidden_dim)  # no nonlinearity
-        self.norm_fusion  = nn.LayerNorm(hidden_dim)
-        self.fuse_drop    = nn.Dropout(dropout)
+        # ── Fusion ────────────────────────────────────────────────────────
+        self.cross_attn_fusion = nn.MultiheadAttention(
+            embed_dim=hidden_dim, num_heads=num_heads,
+            dropout=dropout, batch_first=True,
+        )
+        self.norm_fusion = nn.LayerNorm(hidden_dim)
+        self.fuse_drop   = nn.Dropout(dropout)
 
         # ── Classifier ────────────────────────────────────────────────────
-        self.fc_out_1 = nn.Linear(hidden_dim * 2, output_dim1)
-        self.fc_out_2 = nn.Linear(hidden_dim * 2, output_dim2)
+        self.fc_out_1 = nn.Linear(hidden_dim, output_dim1)
+        self.fc_out_2 = nn.Linear(hidden_dim, output_dim2)
 
     def forward(self, batch):
         audio = batch['audios']
@@ -135,12 +132,13 @@ class MemoCMTFusion(nn.Module):
         # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)                # (B, H)
 
-        # ── Fusion: contrastive discrepancy ────────────────────────────────
-        speaker_proj = self.speaker_proj(speaker_feat)          # (B, H), linear only
-        diff = self.norm_fusion(listener_feat - speaker_proj)   # (B, H)
+        # ── Fusion: Q=listener, K/V=speaker + residual ────────────────────
+        q  = listener_feat.unsqueeze(1)   # (B, 1, H)
+        kv = speaker_feat.unsqueeze(1)    # (B, 1, H)
+        attn_out, _ = self.cross_attn_fusion(query=q, key=kv, value=kv)
         features = self.fuse_drop(
-            torch.cat([listener_feat, diff], dim=-1)
-        )                                                        # (B, 2H)
+            self.norm_fusion(attn_out.squeeze(1) + listener_feat)
+        )                                                       # (B, H)
 
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
