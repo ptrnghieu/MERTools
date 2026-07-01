@@ -53,8 +53,9 @@ class MemoCMTFusion(nn.Module):
         hidden_dim  = args.hidden_dim
         self.grad_clip = args.grad_clip
 
-        self.feat_type      = getattr(args, 'feat_type',      'utt')
-        self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.0)
+        self.feat_type       = getattr(args, 'feat_type',       'utt')
+        self.speaker_drop_p  = getattr(args, 'speaker_drop_p',  0.0)
+        self.cross_pair_p    = getattr(args, 'cross_pair_p',    0.0)
 
         num_heads = max(1, hidden_dim // 64)
 
@@ -128,6 +129,12 @@ class MemoCMTFusion(nn.Module):
         # ── Modality dropout (training only) ──────────────────────────────
         if self.training and self.speaker_drop_p > 0 and torch.rand(1).item() < self.speaker_drop_p:
             speaker_feat = torch.zeros_like(speaker_feat)
+
+        # ── Cross-identity augmentation (training only) ───────────────────
+        # Simulate Interlocutor test domain: swap video with a random sample
+        if self.training and self.cross_pair_p > 0 and torch.rand(1).item() < self.cross_pair_p:
+            idx = torch.randperm(h_v.size(0), device=h_v.device)
+            h_v = h_v[idx]
 
         # ── Listener: learnable query pooling ─────────────────────────────
         listener_feat = self.listener_pool(h_v)                # (B, H)
