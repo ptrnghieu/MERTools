@@ -131,9 +131,15 @@ class MemoCMTFusion(nn.Module):
             speaker_feat = torch.zeros_like(speaker_feat)
 
         # ── Cross-identity augmentation (training only) ───────────────────
-        # Simulate Interlocutor test domain: swap video with a random sample
+        # Simulate Interlocutor domain: swap video within same emotion class
         if self.training and self.cross_pair_p > 0 and torch.rand(1).item() < self.cross_pair_p:
-            idx = torch.randperm(h_v.size(0), device=h_v.device)
+            emos = batch['emos']
+            idx = torch.arange(h_v.size(0), device=h_v.device)
+            for c in emos.unique():
+                mask = (emos == c).nonzero(as_tuple=True)[0]
+                if mask.size(0) > 1:
+                    perm = mask[torch.randperm(mask.size(0), device=h_v.device)]
+                    idx[mask] = perm
             h_v = h_v[idx]
 
         # ── Listener: learnable query pooling ─────────────────────────────
