@@ -24,6 +24,7 @@ from .speaker_listener_fusion import SpeakerListenerFusion
 from .memocmt_fusion import MemoCMTFusion
 from .memocmt_v1 import MemoCMTV1
 from .memocmt_mmin import MemoCMTMMIN
+from .memocmt_mmin_hybrid import MemoCMTMMINHybrid
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -71,6 +72,9 @@ class get_models(nn.Module):
 
             # bare MMIN: imagine listener's own audio/text from video (Interlocutor domain shift)
             'memocmt_mmin':   MemoCMTMMIN,
+
+            # hybrid MMIN: v1 speaker branch + imagined-listener branch fused together
+            'memocmt_mmin_hybrid': MemoCMTMMINHybrid,
 
         }
         self.model = MODEL_MAP[args.model](args)
