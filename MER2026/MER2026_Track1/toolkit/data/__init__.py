@@ -34,6 +34,8 @@ class get_datasets(Dataset):
             'grasp_sequence_fusion': Data_Feat,
             'speaker_listener_fusion': Data_Feat,
             'memocmt_fusion': Data_Feat,
+            'memocmt_v1': Data_Feat,
+            'memocmt_mmin': Data_Feat,
         }
 
         self.dataset_class = MODEL_DATASET_MAP[args.model]
