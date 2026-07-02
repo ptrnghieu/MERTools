@@ -141,3 +141,10 @@ memocmt_fusion:
   lr: [1e-3, 1e-4]
   cross_pair_p: [0.3, 0.5, 0.7]
   speaker_drop_p: [0.3, 0.5]
+
+memocmt_mmin:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [1.0, -1.0]
+  lr: [1e-3, 1e-4]
+  lambda_forward: [0.5, 1.0, 2.0]
