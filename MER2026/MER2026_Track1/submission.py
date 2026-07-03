@@ -65,11 +65,13 @@ def adjust_submission(result_npz, save_csv, tau=1.0):
     _write_preds_to_csv(emo_preds, save_csv)
 
 
-def ensemble_submission(result_npzs, save_csv):
-    """Average emo_probs (logits) across multiple test1 npz files, then argmax.
+def ensemble_submission(result_npzs, save_csv, tau=0.0):
+    """Average emo_probs (logits) across multiple test1 npz files, apply optional
+    label-shift correction (tau), then argmax.
 
     result_npzs: comma-separated list of npz paths (all must share sample order,
     which holds since test1 uses shuffle=False).
+    tau: post-hoc label-shift strength applied to the averaged logits.
     """
     paths = [p.strip() for p in result_npzs.split(',') if p.strip()]
     assert len(paths) >= 1, 'need at least one npz'
@@ -82,9 +84,18 @@ def ensemble_submission(result_npzs, save_csv):
         stacked = probs if stacked is None else stacked + probs
     avg = stacked / len(paths)
 
-    emo_preds = np.argmax(avg, 1)
-    emo_preds = [idx2emo_mer[idx] for idx in emo_preds]
-    print(f'ensembled {len(paths)} runs, {avg.shape[0]} samples -> {save_csv}')
+    if tau != 0.0:
+        avg = avg - tau * np.log(_train_prior() + 1e-12)[None, :]
+
+    preds_idx = np.argmax(avg, 1)
+    n = len(preds_idx)
+    from collections import Counter
+    c = Counter(preds_idx.tolist())
+    print(f'ensembled {len(paths)} runs (tau={tau}), {n} samples:')
+    for idx in sorted(c):
+        print(f'   {idx2emo_mer[idx]:10s}: {c[idx]:6d} ({100*c[idx]/n:5.1f}%)')
+
+    emo_preds = [idx2emo_mer[idx] for idx in preds_idx]
     _write_preds_to_csv(emo_preds, save_csv)
 
 
