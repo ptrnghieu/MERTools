@@ -347,7 +347,12 @@ if __name__ == '__main__':
     cv_result = gain_cv_results(folder_save)
     save_path = f'{save_resroot}/cv_{prefix_name}_{cv_result}_{name_time}.npz'
     print (f'save results in {save_path}')
+    # aggregate val predictions/labels across folds for diagnostics
+    _ep = [f['eval_emo_probs']  for f in folder_save if 'eval_emo_probs'  in f]
+    _el = [f['eval_emo_labels'] for f in folder_save if 'eval_emo_labels' in f]
     np.savez_compressed(save_path,
+                        eval_emo_probs =np.concatenate(_ep) if _ep else np.array([]),
+                        eval_emo_labels=np.concatenate(_el) if _el else np.array([]),
                         args=np.array(args, dtype=object))
 
     ## store test1 results => [we store results on 'emo_probs']

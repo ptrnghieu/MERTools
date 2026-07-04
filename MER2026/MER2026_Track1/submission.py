@@ -65,6 +65,32 @@ def adjust_submission(result_npz, save_csv, tau=1.0):
     _write_preds_to_csv(emo_preds, save_csv)
 
 
+def val_report(cv_npz, tau=0.0):
+    """Confusion matrix + per-class precision/recall/F1/acc on the validation
+    folds, from a cv npz that stored eval_emo_probs / eval_emo_labels.
+    tau optionally applies the same label-shift used at test (default off; on
+    val the prior is the train prior so tau!=0 is only for what-if inspection).
+    """
+    from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+    d = np.load(cv_npz, allow_pickle=True)
+    if 'eval_emo_probs' not in d or len(d['eval_emo_probs']) == 0:
+        print('This cv npz has no eval predictions (older run). Re-run with the patched code.')
+        return
+    probs  = np.array(d['eval_emo_probs'].tolist(), dtype=np.float64)
+    labels = np.array(d['eval_emo_labels'].tolist()).astype(int)
+    if tau != 0.0:
+        probs = probs - tau * np.log(_train_prior() + 1e-12)[None, :]
+    preds = probs.argmax(1)
+    names = [idx2emo_mer[i] for i in range(len(idx2emo_mer))]
+    print(f'val samples: {len(labels)} | overall acc: {accuracy_score(labels, preds):.4f} | tau={tau}\n')
+    print('Confusion matrix (rows=true, cols=pred):')
+    print('        ' + '  '.join(f'{n[:4]:>4}' for n in names))
+    for i, row in enumerate(confusion_matrix(labels, preds, labels=list(range(len(names))))):
+        print(f'  {names[i][:4]:>4}  ' + '  '.join(f'{v:>4}' for v in row))
+    print()
+    print(classification_report(labels, preds, target_names=names, digits=4))
+
+
 def ensemble_submission(result_npzs, save_csv, tau=0.0):
     """Average emo_probs (logits) across multiple test1 npz files, apply optional
     label-shift correction (tau), then argmax.
