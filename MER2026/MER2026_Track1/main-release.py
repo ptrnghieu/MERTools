@@ -319,8 +319,8 @@ if __name__ == '__main__':
         folder_save.append(whole_store[best_index])
 
         # print confusion matrix for best eval epoch
-        _emo_probs  = whole_store[best_index].get('eval_emo_probs',  None)
-        _emo_labels = whole_store[best_index].get('eval_emo_labels', None)
+        _emo_probs  = whole_store[best_index].get('eval_emoprobs',  None)
+        _emo_labels = whole_store[best_index].get('eval_emolabels', None)
         if _emo_probs is not None and len(_emo_probs) > 0:
             from sklearn.metrics import confusion_matrix as _cm
             _preds = np.argmax(_emo_probs, axis=1)
@@ -348,8 +348,8 @@ if __name__ == '__main__':
     save_path = f'{save_resroot}/cv_{prefix_name}_{cv_result}_{name_time}.npz'
     print (f'save results in {save_path}')
     # aggregate val predictions/labels across folds for diagnostics
-    _ep = [f['eval_emo_probs']  for f in folder_save if 'eval_emo_probs'  in f]
-    _el = [f['eval_emo_labels'] for f in folder_save if 'eval_emo_labels' in f]
+    _ep = [f['eval_emoprobs']  for f in folder_save if 'eval_emoprobs'  in f]
+    _el = [f['eval_emolabels'] for f in folder_save if 'eval_emolabels' in f]
     np.savez_compressed(save_path,
                         eval_emo_probs =np.concatenate(_ep) if _ep else np.array([]),
                         eval_emo_labels=np.concatenate(_el) if _el else np.array([]),
