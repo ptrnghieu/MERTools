@@ -28,6 +28,7 @@ from .memocmt_mmin_hybrid import MemoCMTMMINHybrid
 from .memocmt_v2 import MemoCMTV2
 from .memocmt_v3 import MemoCMTV3
 from .memocmt_v4 import MemoCMTV4
+from .memocmt_v5 import MemoCMTV5
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -87,6 +88,9 @@ class get_models(nn.Module):
 
             # v3 fusion upgraded: listener attends full a2t/t2a sequences separately, 1:1 combine
             'memocmt_v4': MemoCMTV4,
+
+            # v4 + learned per-channel gate for audio/text mix
+            'memocmt_v5': MemoCMTV5,
 
         }
         self.model = MODEL_MAP[args.model](args)
