@@ -25,6 +25,7 @@ from .memocmt_fusion import MemoCMTFusion
 from .memocmt_v1 import MemoCMTV1
 from .memocmt_mmin import MemoCMTMMIN
 from .memocmt_mmin_hybrid import MemoCMTMMINHybrid
+from .memocmt_v2 import MemoCMTV2
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -75,6 +76,9 @@ class get_models(nn.Module):
 
             # hybrid MMIN: v1 speaker branch + imagined-listener branch fused together
             'memocmt_mmin_hybrid': MemoCMTMMINHybrid,
+
+            # visual-anchored: bidir visual + self-attn + gated dual cross-attn (Q=visual)
+            'memocmt_v2': MemoCMTV2,
 
         }
         self.model = MODEL_MAP[args.model](args)
