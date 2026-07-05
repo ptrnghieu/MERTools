@@ -27,6 +27,7 @@ from .memocmt_mmin import MemoCMTMMIN
 from .memocmt_mmin_hybrid import MemoCMTMMINHybrid
 from .memocmt_v2 import MemoCMTV2
 from .memocmt_v3 import MemoCMTV3
+from .memocmt_v4 import MemoCMTV4
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -83,6 +84,9 @@ class get_models(nn.Module):
 
             # v1 + per-modality speaker pooling + 2-token fusion
             'memocmt_v3': MemoCMTV3,
+
+            # v3 fusion upgraded: listener attends full a2t/t2a sequences separately, 1:1 combine
+            'memocmt_v4': MemoCMTV4,
 
         }
         self.model = MODEL_MAP[args.model](args)
