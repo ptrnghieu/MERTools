@@ -26,6 +26,7 @@ from .memocmt_v1 import MemoCMTV1
 from .memocmt_mmin import MemoCMTMMIN
 from .memocmt_mmin_hybrid import MemoCMTMMINHybrid
 from .memocmt_v2 import MemoCMTV2
+from .memocmt_v3 import MemoCMTV3
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -79,6 +80,9 @@ class get_models(nn.Module):
 
             # visual-anchored: bidir visual + self-attn + gated dual cross-attn (Q=visual)
             'memocmt_v2': MemoCMTV2,
+
+            # v1 + per-modality speaker pooling + 2-token fusion
+            'memocmt_v3': MemoCMTV3,
 
         }
         self.model = MODEL_MAP[args.model](args)
