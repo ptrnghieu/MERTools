@@ -29,6 +29,7 @@ from .memocmt_v2 import MemoCMTV2
 from .memocmt_v3 import MemoCMTV3
 from .memocmt_v4 import MemoCMTV4
 from .memocmt_v5 import MemoCMTV5
+from .memocmt_v6 import MemoCMTV6
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -91,6 +92,10 @@ class get_models(nn.Module):
 
             # v4 + learned per-channel gate for audio/text mix
             'memocmt_v5': MemoCMTV5,
+
+            # v3 + CM-StEW auxiliary (train-only): translation + alignment
+            # losses that distill speaker audio/text into the video encoder
+            'memocmt_v6': MemoCMTV6,
 
         }
         self.model = MODEL_MAP[args.model](args)

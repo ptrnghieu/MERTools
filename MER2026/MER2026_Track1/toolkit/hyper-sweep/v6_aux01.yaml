@@ -1,0 +1,8 @@
+memocmt_v6:
+  hidden_dim: 128
+  dropout: 0.3
+  grad_clip: 1.0
+  lr: 1e-4
+  speaker_drop_p: 0.0
+  alpha_align: 0.1
+  beta_trans: 0.1

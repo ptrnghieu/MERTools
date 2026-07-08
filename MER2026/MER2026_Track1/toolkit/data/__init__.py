@@ -41,6 +41,7 @@ class get_datasets(Dataset):
             'memocmt_v3': Data_Feat,
             'memocmt_v4': Data_Feat,
             'memocmt_v5': Data_Feat,
+            'memocmt_v6': Data_Feat,
         }
 
         self.dataset_class = MODEL_DATASET_MAP[args.model]
