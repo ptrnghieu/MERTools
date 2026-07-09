@@ -17,7 +17,14 @@ Usage (probe first!):
      --out_dir ./au_dynamics-FRA --n_frms 10 \
      --upload_repo hhieupt/mer2026-features --upload_every 2000
 """
-import os, glob, argparse, tempfile
+import sys, os
+# The repo dir contains a statistics.py that shadows Python's stdlib and breaks
+# seaborn -> py-feat. Running this script by its repo path puts that dir on
+# sys.path[0]; strip it so stdlib `statistics` wins.
+_self = os.path.dirname(os.path.abspath(__file__))
+sys.path = [p for p in sys.path if os.path.abspath(p or '.') != _self]
+
+import glob, argparse, tempfile
 import numpy as np
 
 
