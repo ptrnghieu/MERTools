@@ -1,0 +1,7 @@
+memocmt_v7:
+  hidden_dim: 128
+  dropout: 0.3
+  grad_clip: 1.0
+  lr: 1e-4
+  speaker_drop_p: 0.0
+  conflict_p: 0.3

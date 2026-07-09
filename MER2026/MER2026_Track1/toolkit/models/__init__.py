@@ -30,6 +30,7 @@ from .memocmt_v3 import MemoCMTV3
 from .memocmt_v4 import MemoCMTV4
 from .memocmt_v5 import MemoCMTV5
 from .memocmt_v6 import MemoCMTV6
+from .memocmt_v7 import MemoCMTV7
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -96,6 +97,10 @@ class get_models(nn.Module):
             # v3 + CM-StEW auxiliary (train-only): translation + alignment
             # losses that distill speaker audio/text into the video encoder
             'memocmt_v6': MemoCMTV6,
+
+            # v3 + Nonverbal Conflict Exposure (train-only): in-batch donor
+            # swap of speaker audio/text to teach video-anchored robustness
+            'memocmt_v7': MemoCMTV7,
 
         }
         self.model = MODEL_MAP[args.model](args)
