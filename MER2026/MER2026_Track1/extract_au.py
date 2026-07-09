@@ -45,10 +45,18 @@ def _fit_rows(arr, n):
 
 
 def _upload(local_dir, repo):
-    from huggingface_hub import upload_folder
-    base = os.path.basename(local_dir.rstrip('/'))
-    upload_folder(repo_id=repo, repo_type='dataset',
-                  folder_path=local_dir, path_in_repo=base)
+    # HF rejects >10000 files per directory, so mirror the existing feature
+    # convention: upload ONE zip (au_dynamics-FRA.zip) containing the folder,
+    # unzipped locally on the training instance.
+    import shutil
+    from huggingface_hub import HfApi
+    local_dir = local_dir.rstrip('/')
+    parent = os.path.dirname(os.path.abspath(local_dir))
+    base = os.path.basename(local_dir)
+    zip_base = os.path.join(parent, base)               # -> parent/<base>.zip
+    shutil.make_archive(zip_base, 'zip', root_dir=parent, base_dir=base)
+    HfApi().upload_file(path_or_fileobj=zip_base + '.zip', path_in_repo=base + '.zip',
+                        repo_id=repo, repo_type='dataset')
 
 
 def main():
