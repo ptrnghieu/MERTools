@@ -43,6 +43,15 @@ def uniform_idx(n, k):
     return np.linspace(0, n - 1, k).astype(int).tolist()
 
 
+def find_crop(face_root, name):
+    for cand in [os.path.join(face_root, name, name + '.npy'),
+                 os.path.join(face_root, name + '.npy')]:
+        if os.path.exists(cand):
+            return cand
+    hits = glob.glob(os.path.join(face_root, name, '*.npy'))   # any npy in the name dir
+    return hits[0] if hits else None
+
+
 def frames_to_data_uris(crop_npy, n_frames):
     from PIL import Image
     fr = np.load(crop_npy)                                   # (T,H,W,3) uint8
@@ -92,8 +101,10 @@ def main():
         cache = os.path.join(args.cache_dir, name + '.json')
         if os.path.exists(cache):
             probs_all.append(np.array(json.load(open(cache))['probs'])); continue
-        crop = os.path.join(args.face_root, name, name + '.npy')
+        crop = find_crop(args.face_root, name)
         try:
+            if crop is None:
+                raise FileNotFoundError(f'no crop npy for {name}')
             uris = frames_to_data_uris(crop, args.n_frames)
             content = [{'type': 'text',
                         'text': f'Speaker said (Chinese): "{transcript(name)}". '
