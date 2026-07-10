@@ -25,13 +25,24 @@ import numpy as np
 EMOS = ['neutral', 'angry', 'happy', 'sad', 'worried', 'surprise']   # exact MER label vocab / idx order
 
 SYSTEM = (
-    "You are an expert at reading emotions in dyadic conversations. In each sample two "
-    "people interact: a SPEAKER who is talking, and a LISTENER who is silently listening. "
-    "You are given several frames of the LISTENER's face and the SPEAKER's utterance "
-    "transcript. Predict the LISTENER's emotion right now -- how the listener feels while "
-    "hearing the speaker. Judge PRIMARILY from the listener's facial expression; use the "
-    "speaker's words only as context to disambiguate. Choose among exactly: "
-    "neutral, angry, happy, sad, worried, surprise. "
+    "You are an expert FACS-based emotion reader for dyadic conversations. Two people "
+    "interact: a SPEAKER (talking) and a LISTENER (silently listening). You are given frames "
+    "of the LISTENER's face and the SPEAKER's transcript. Predict the LISTENER's emotion while "
+    "hearing the speaker, judging PRIMARILY from the listener's facial expression; use the "
+    "speaker's words only as context.\n"
+    "Choose ONE of neutral, angry, happy, sad, worried, surprise using these cues:\n"
+    "- neutral: relaxed face, no strong muscle action. If the expression is mild or ambiguous, "
+    "choose neutral (do NOT default to worried).\n"
+    "- angry: brows LOWERED and drawn together, hard/tense stare or glare, lips pressed/tightened, "
+    "jaw tension. Lowered tense brows = angry, NOT worried.\n"
+    "- happy: smile, raised cheeks, crow's-feet.\n"
+    "- sad: INNER brow corners raised, lip corners pulled DOWN, downcast/drooping look.\n"
+    "- worried: INNER brows raised with anxious concern, NO aggression or glare. Use worried ONLY "
+    "when clear anxiety is visible, NOT for any furrowed brow.\n"
+    "- surprise: BOTH brows raised high, eyes widened, jaw dropped (brief). Do not confuse mild "
+    "attentiveness with surprise.\n"
+    "KEY: distinguish ANGRY (lowered, tense, aggressive brows) from WORRIED (raised inner brows, "
+    "anxious, non-aggressive). Anger is common; do not avoid it.\n"
     'Reply ONLY with JSON: {"reason": "<short>", "scores": {"neutral":0-100, "angry":0-100, '
     '"happy":0-100, "sad":0-100, "worried":0-100, "surprise":0-100}} with scores summing to 100.'
 )
@@ -63,10 +74,21 @@ def frames_to_data_uris(crop_npy, n_frames):
 
 
 def parse_scores(text):
-    s = text[text.find('{'): text.rfind('}') + 1]
-    d = json.loads(s)['scores']
-    v = np.array([float(d.get(e, 0)) for e in EMOS], dtype=np.float64)
-    if v.sum() <= 0: v = np.ones(6)
+    import re
+    v = None
+    try:
+        s = text[text.find('{'): text.rfind('}') + 1]
+        d = json.loads(s)['scores']
+        v = np.array([float(d.get(e, 0)) for e in EMOS], dtype=np.float64)
+    except Exception:
+        # robust fallback: regex "<label>": <number> even if JSON is malformed
+        v = np.zeros(6)
+        for i, e in enumerate(EMOS):
+            m = re.search(rf'"{e}"\s*:\s*([0-9.]+)', text)
+            if m:
+                v[i] = float(m.group(1))
+    if v is None or v.sum() <= 0:
+        v = np.ones(6)
     return v / v.sum()                                       # probs over 6
 
 
