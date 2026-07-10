@@ -6,3 +6,4 @@ memocmt_v9:
   speaker_drop_p: 0.0
   clip_split: 768
   au_mouth_drop: false
+  au_gate: false

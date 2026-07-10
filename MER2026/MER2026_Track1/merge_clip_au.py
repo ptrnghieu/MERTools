@@ -1,24 +1,30 @@
 """
-Build clip_au-FRA = [CLIP video features | prepped AU/landmark/pose] per frame,
-used by memocmt_v9 (which splits it back into a CLIP branch + an AU branch).
+Build clip_au20-FRA = [CLIP video features | AU-only (20 FACS intensities)]
+for memocmt_v9, which splits it into a CLIP branch + an AU branch.
 
-AU prep (addresses train/test confounds):
-  (1) interpolate all-zero AU rows (OpenFace/py-feat detection failures that
-      extract_au wrote as nan->0) from neighbouring frames;
-  (2) per-column z-score using TRAIN-only statistics (unsupervised, no label
-      leak) so raw AU intensities / landmarks / pose share a scale.
-
-Then resample AU to CLIP's frame count and concat.
+Design choices (from transfer analysis):
+  - AU-ONLY: keep the first 20 dims (AU intensities); DROP the 136 landmark +
+    6 head-pose dims. Raw 2D landmarks / pose encode head position, face shape,
+    identity and head-pose -- and head-pose is the strongest talking->listening
+    shift, i.e. the WORST-transferring signal. AU intensities are normalized,
+    pose/identity-invariant muscle activations -> the cleanest transfer.
+  - Keep AU at its own frame count and UPSAMPLE CLIP to it (not the reverse),
+    so AU's temporal resolution (micro-expression dynamics) is preserved; the
+    model gives AU its own LSTM branch.
+  - Interpolate all-zero (detection-fail) AU rows from neighbours.
+  - Per-AU z-score using TRAIN-only stats (unsupervised, no label leak).
 
 Usage:
   python3 merge_clip_au.py \
-    --clip_dir  embeddings/clip-vit-large-patch14-FRA \
-    --au_dir    embeddings/au_dynamics-FRA \
-    --out_dir   embeddings/clip_au-FRA \
+    --clip_dir embeddings/clip-vit-large-patch14-FRA \
+    --au_dir   embeddings/au_dynamics-FRA \
+    --out_dir  embeddings/clip_au20-FRA \
     --label_npz /workspace/mer2026/track1_label_6way.npz
 """
 import os, glob, argparse
 import numpy as np
+
+AU_N = 20   # first 20 dims of au_dynamics = FACS AU intensities
 
 
 def resample(x, T):
@@ -29,15 +35,19 @@ def resample(x, T):
 
 
 def interp_zero_rows(a):
-    """Linearly interpolate rows that are all-zero (detection failures)."""
-    bad = ~np.any(a != 0, axis=1)          # True where row is all zeros
+    bad = ~np.any(a != 0, axis=1)
     if not bad.any() or bad.all():
         return a
     good = np.where(~bad)[0]
     for i in np.where(bad)[0]:
-        j = good[np.argmin(np.abs(good - i))]   # nearest good frame
-        a[i] = a[j]
+        a[i] = a[good[np.argmin(np.abs(good - i))]]
     return a
+
+
+def load_au20(path):
+    a = np.load(path).astype(np.float64)          # (T, 162)
+    a = interp_zero_rows(a)
+    return a[:, :AU_N]                             # (T, 20) AU intensities only
 
 
 def main():
@@ -45,29 +55,23 @@ def main():
     ap.add_argument('--clip_dir', required=True)
     ap.add_argument('--au_dir',   required=True)
     ap.add_argument('--out_dir',  required=True)
-    ap.add_argument('--label_npz', required=True, help='track1_label_6way.npz for train names -> z-score stats')
+    ap.add_argument('--label_npz', required=True)
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
-    au_files = glob.glob(os.path.join(args.au_dir, '*.npy'))
-    assert au_files, f'no AU files in {args.au_dir}'
-    au_dim = np.load(au_files[0]).shape[1]
-    print(f'AU dim = {au_dim}; {len(au_files)} au files present')
-
-    # --- train-only z-score stats (mean/std per column over train frames) ---
+    # train-only z-score stats over the 20 AU dims
     train_names = set(np.load(args.label_npz, allow_pickle=True)['train_corpus'].tolist().keys())
-    n, s, ss = 0, np.zeros(au_dim), np.zeros(au_dim)
+    n, s, ss = 0, np.zeros(AU_N), np.zeros(AU_N)
     for name in train_names:
         p = os.path.join(args.au_dir, name + '.npy')
         if not os.path.exists(p):
             continue
-        a = interp_zero_rows(np.load(p).astype(np.float64))
+        a = load_au20(p)
         n += a.shape[0]; s += a.sum(0); ss += (a * a).sum(0)
     mean = s / max(n, 1)
     std = np.sqrt(np.maximum(ss / max(n, 1) - mean ** 2, 0)) + 1e-6
-    print(f'z-score stats from {n} train frames | mean[:3]={mean[:3].round(3)} std[:3]={std[:3].round(3)}')
+    print(f'AU z-score from {n} train frames | mean={mean.round(2)}')
 
-    # --- build clip_au ---
     miss = 0
     clip_files = glob.glob(os.path.join(args.clip_dir, '*.npy'))
     for f in clip_files:
@@ -75,15 +79,16 @@ def main():
         clip = np.load(f).astype(np.float32)               # (Tc, 768)
         aup = os.path.join(args.au_dir, name)
         if os.path.exists(aup):
-            au = interp_zero_rows(np.load(aup).astype(np.float64))
-            au = (au - mean) / std                          # z-score (train stats)
-            au = resample(au.astype(np.float32), clip.shape[0])
+            au = (load_au20(aup) - mean) / std             # (Ta, 20) z-scored
+            au = au.astype(np.float32)
         else:
-            au = np.zeros((clip.shape[0], au_dim), np.float32)
+            au = np.zeros((clip.shape[0], AU_N), np.float32)
             miss += 1
-        out = np.concatenate([clip, au], axis=1)            # (Tc, 768+au_dim)
+        clip_rs = resample(clip, au.shape[0])              # upsample CLIP to AU length
+        out = np.concatenate([clip_rs, au], axis=1)        # (Ta, 768+20)
         np.save(os.path.join(args.out_dir, name), out)
-    print(f'DONE: {len(clip_files)} merged, {miss} missing-AU (zero) -> {args.out_dir}')
+    print(f'DONE: {len(clip_files)} merged, {miss} missing-AU (zero) -> {args.out_dir} '
+          f'(dim {768 + AU_N})')
 
 
 if __name__ == '__main__':

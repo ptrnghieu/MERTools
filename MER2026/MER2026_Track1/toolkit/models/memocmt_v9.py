@@ -71,6 +71,7 @@ class MemoCMTV9(nn.Module):
         self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.0)
         self.clip_split     = getattr(args, 'clip_split',     768)
         self.au_mouth_drop  = getattr(args, 'au_mouth_drop',  False)
+        self.au_gate        = getattr(args, 'au_gate',        False)
         au_dim = video_dim - self.clip_split
         assert au_dim > 0, f'video_dim {video_dim} <= clip_split {self.clip_split}'
         self.register_buffer('mouth_idx', torch.tensor(_MOUTH_IDX, dtype=torch.long))
@@ -88,7 +89,11 @@ class MemoCMTV9(nn.Module):
         # video-side pooling + gated embedding fusion
         self.clip_pool = LearnableQueryPooling(hidden_dim, num_heads, dropout)
         self.au_pool   = LearnableQueryPooling(hidden_dim, num_heads, dropout)
-        self.vgate  = nn.Linear(2 * hidden_dim, hidden_dim)
+        # default: concat -> proj (both contribute independently, no zero-sum
+        # competition that would let strong CLIP suppress the weaker new AU).
+        # au_gate=True switches to an elementwise gated convex mix (experiment).
+        self.vproj = nn.Linear(2 * hidden_dim, hidden_dim)
+        self.vgate = nn.Linear(2 * hidden_dim, hidden_dim)
         self.norm_v = nn.LayerNorm(hidden_dim)
 
         # speaker branch (identical to v3)
@@ -132,8 +137,13 @@ class MemoCMTV9(nn.Module):
         # video-side gated embedding fusion
         clip_feat = self.clip_pool(h_clip)            # (B, H)
         au_feat   = self.au_pool(h_au)                # (B, H)
-        gate = torch.sigmoid(self.vgate(torch.cat([clip_feat, au_feat], dim=-1)))
-        listener_feat = self.norm_v(gate * clip_feat + (1.0 - gate) * au_feat)
+        cat = torch.cat([clip_feat, au_feat], dim=-1)
+        if self.au_gate:
+            g = torch.sigmoid(self.vgate(cat))        # elementwise gate
+            fused = g * clip_feat + (1.0 - g) * au_feat
+        else:
+            fused = self.vproj(cat)                   # concat -> proj (default)
+        listener_feat = self.norm_v(fused)
 
         # speaker bidir cross-attention (v3)
         a2t, _ = self.cross_attn_a2t(query=h_a, key=h_t, value=h_t)
