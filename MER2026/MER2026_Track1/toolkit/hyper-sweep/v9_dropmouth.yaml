@@ -1,0 +1,8 @@
+memocmt_v9:
+  hidden_dim: 128
+  dropout: 0.3
+  grad_clip: 1.0
+  lr: 1e-4
+  speaker_drop_p: 0.0
+  clip_split: 768
+  au_mouth_drop: true
