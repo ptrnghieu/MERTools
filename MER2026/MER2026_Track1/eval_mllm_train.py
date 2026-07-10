@@ -18,7 +18,9 @@ Usage:
 """
 import os, sys, json, argparse, random
 _self = os.path.dirname(os.path.abspath(__file__))
-sys.path = [p for p in sys.path if os.path.abspath(p or '.') != _self]
+# move repo dir to the END of sys.path: stdlib 'statistics' wins over the repo's
+# statistics.py, but local mllm_predict is still importable.
+sys.path = [p for p in sys.path if os.path.abspath(p or '.') != _self] + [_self]
 import numpy as np
 from mllm_predict import SYSTEM, EMOS, find_crop, frames_to_data_uris, parse_scores
 
