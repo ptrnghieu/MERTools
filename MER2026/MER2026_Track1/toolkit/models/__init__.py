@@ -33,6 +33,7 @@ from .memocmt_v6 import MemoCMTV6
 from .memocmt_v7 import MemoCMTV7
 from .memocmt_v8 import MemoCMTV8
 from .memocmt_v9 import MemoCMTV9
+from .memocmt_v10 import MemoCMTV10
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -110,6 +111,10 @@ class get_models(nn.Module):
 
             # separate CLIP + AU/landmark branches, gated embedding fusion
             'memocmt_v9': MemoCMTV9,
+
+            # non-disruptive AU add-on: pure-CLIP anchor (v3) + au_feat as a
+            # 3rd fusion token the attention may use or ignore
+            'memocmt_v10': MemoCMTV10,
 
         }
         self.model = MODEL_MAP[args.model](args)
