@@ -116,7 +116,9 @@ def main():
             txt = r.choices[0].message.content
             p = parse_scores(txt)
         except Exception as e:
-            print(f'[{k}] {name} FAIL: {repr(e)[:120]}'); p = np.ones(6) / 6; n_fail += 1; txt = ''
+            print(f'[{k}] {name} FAIL: {repr(e)[:120]}')
+            probs_all.append(np.ones(6) / 6); n_fail += 1
+            continue                                          # do NOT cache failures
         json.dump({'probs': p.tolist(), 'raw': txt}, open(cache, 'w'))
         probs_all.append(p)
         if k < 5 or k % 500 == 0:
