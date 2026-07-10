@@ -22,7 +22,7 @@ _self = os.path.dirname(os.path.abspath(__file__))          # avoid repo statist
 sys.path = [p for p in sys.path if os.path.abspath(p or '.') != _self]
 import numpy as np
 
-EMOS = ['neutral', 'anger', 'happiness', 'sadness', 'worry', 'surprise']
+EMOS = ['neutral', 'angry', 'happy', 'sad', 'worried', 'surprise']   # exact MER label vocab / idx order
 
 SYSTEM = (
     "You are an expert at reading emotions in dyadic conversations. In each sample two "
@@ -31,9 +31,9 @@ SYSTEM = (
     "transcript. Predict the LISTENER's emotion right now -- how the listener feels while "
     "hearing the speaker. Judge PRIMARILY from the listener's facial expression; use the "
     "speaker's words only as context to disambiguate. Choose among exactly: "
-    "neutral, anger, happiness, sadness, worry, surprise. "
-    'Reply ONLY with JSON: {"reason": "<short>", "scores": {"neutral":0-100, "anger":0-100, '
-    '"happiness":0-100, "sadness":0-100, "worry":0-100, "surprise":0-100}} with scores summing to 100.'
+    "neutral, angry, happy, sad, worried, surprise. "
+    'Reply ONLY with JSON: {"reason": "<short>", "scores": {"neutral":0-100, "angry":0-100, '
+    '"happy":0-100, "sad":0-100, "worried":0-100, "surprise":0-100}} with scores summing to 100.'
 )
 
 
