@@ -1,7 +1,13 @@
 import itertools
-import torchaudio
 
-from PIL import Image
+try:                                    # only needed by unrelated audio utils
+    import torchaudio                   # noqa
+except Exception:
+    torchaudio = None
+try:
+    from PIL import Image               # noqa
+except Exception:
+    Image = None
 from sklearn.metrics import confusion_matrix
 
 import torch
