@@ -73,8 +73,12 @@ def transcript_map(subtitle_csv):
 
 
 @torch.no_grad()
-def score_labels(model, processor, frames, transcript):
-    """Return softmax over the 6 emotion words' summed log-prob completions."""
+def score_labels(model, processor, frames, transcript, first_ids):
+    """First-token verbalizer scoring: ONE forward over the prompt ending in
+    '{"emotion": "', read the next-token log-prob of each label's first token
+    (all 6 are distinct), softmax. This is exactly what the model would
+    generate, needs one forward (not six), and avoids the multi-token
+    mean-logprob bias that suppressed single-token labels (e.g. happy)."""
     ctx = CTX_WITH.format(t=transcript) if transcript.strip() else CTX_NONE
     user_text = HEAD + ctx + TAIL
     messages = [
@@ -83,25 +87,12 @@ def score_labels(model, processor, frames, transcript):
                                     + [{'type': 'text', 'text': user_text}]},
     ]
     prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    prefix = prompt + ASST_PREFIX                    # shared across all 6 labels
-    # prefix length measured WITH image expansion (same frames) -> aligns with
-    # the forward's input_ids. Using the text tokenizer here would be wrong:
-    # the processor expands each image into many pad tokens, shifting offsets.
-    prefix_len = processor(text=[prefix], images=frames,
-                           return_tensors='pt').input_ids.shape[1]
-
-    scores = np.zeros(6, dtype=np.float64)
-    for j, lab in enumerate(EMOS):
-        inputs = processor(text=[prefix + lab], images=frames, return_tensors='pt').to(model.device)
-        ids = inputs.input_ids
-        lab_end = ids.shape[1]                        # label tokens = [prefix_len, lab_end)
-        out = model(**inputs)
-        logp = torch.log_softmax(out.logits[0].float(), dim=-1)   # (L, V)
-        # token at position p is predicted by logits at p-1
-        span = list(range(prefix_len, lab_end))
-        s = sum(float(logp[p - 1, ids[0, p]]) for p in span)
-        scores[j] = s / max(1, len(span))             # length-normalized mean log-prob
-    z = scores - scores.max()
+    prefix = prompt + ASST_PREFIX
+    inputs = processor(text=[prefix], images=frames, return_tensors='pt').to(model.device)
+    out = model(**inputs)
+    logp = torch.log_softmax(out.logits[0, -1].float(), dim=-1)   # next-token dist
+    s = np.array([float(logp[i]) for i in first_ids], dtype=np.float64)
+    z = s - s.max()
     p = np.exp(z); p /= p.sum()
     return p
 
@@ -127,6 +118,10 @@ def main():
     model = PeftModel.from_pretrained(model, args.adapter)
     model.eval()
 
+    first_ids = [processor.tokenizer(e, add_special_tokens=False).input_ids[0] for e in EMOS]
+    assert len(set(first_ids)) == len(EMOS), f'label first-tokens collide: {first_ids}'
+    print('label first-token ids:', dict(zip(EMOS, first_ids)))
+
     names = [r['name'] for r in csv.DictReader(open(args.candidate_csv, newline=''))]
     if args.limit:
         names = names[:args.limit]
@@ -139,7 +134,7 @@ def main():
             if crop is None:
                 raise FileNotFoundError(f'no crop for {name}')
             frames = load_frames(crop, args.n_frames)
-            p = score_labels(model, processor, frames, tmap.get(name, ''))
+            p = score_labels(model, processor, frames, tmap.get(name, ''), first_ids)
         except Exception as e:
             print(f'[{k}] {name} FAIL: {repr(e)[:100]}')
             p = np.ones(6) / 6; n_fail += 1
