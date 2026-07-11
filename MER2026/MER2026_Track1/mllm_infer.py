@@ -84,22 +84,23 @@ def score_labels(model, processor, frames, transcript):
     ]
     prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     prefix = prompt + ASST_PREFIX                    # shared across all 6 labels
-    tok = processor.tokenizer
-    prefix_len = len(tok(prefix, add_special_tokens=False).input_ids)
+    # prefix length measured WITH image expansion (same frames) -> aligns with
+    # the forward's input_ids. Using the text tokenizer here would be wrong:
+    # the processor expands each image into many pad tokens, shifting offsets.
+    prefix_len = processor(text=[prefix], images=frames,
+                           return_tensors='pt').input_ids.shape[1]
 
     scores = np.zeros(6, dtype=np.float64)
     for j, lab in enumerate(EMOS):
-        full_text = prefix + lab + '"}'
-        inputs = processor(text=[full_text], images=frames, return_tensors='pt').to(model.device)
+        inputs = processor(text=[prefix + lab], images=frames, return_tensors='pt').to(model.device)
         ids = inputs.input_ids
-        # label-word token span = tokens added by (prefix+lab) beyond prefix
-        lab_end = len(tok(prefix + lab, add_special_tokens=False).input_ids)
+        lab_end = ids.shape[1]                        # label tokens = [prefix_len, lab_end)
         out = model(**inputs)
         logp = torch.log_softmax(out.logits[0].float(), dim=-1)   # (L, V)
         # token at position p is predicted by logits at p-1
-        span = range(prefix_len, lab_end)
+        span = list(range(prefix_len, lab_end))
         s = sum(float(logp[p - 1, ids[0, p]]) for p in span)
-        scores[j] = s / max(1, len(list(span)))       # length-normalized mean log-prob
+        scores[j] = s / max(1, len(span))             # length-normalized mean log-prob
     z = scores - scores.max()
     p = np.exp(z); p /= p.sum()
     return p
