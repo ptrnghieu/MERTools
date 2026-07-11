@@ -29,7 +29,7 @@ python3 -u tma_finetune.py --mode bridge \
 python3 -u tma_finetune.py --mode tma --tag t1 \
   --bridge_ckpt ./tma_out/bridge_v3.pt \
   --bridge_logits ./tma_out/bridge_v3_test1.npz \
-  --tma_lr 1e-4 --tma_epochs 20 --tma_speaker_drop 0.3 --tau 2.5 --top_frac 0.5 \
+  --tma_lr 1e-4 --tma_epochs 20 --tma_speaker_drop 0.3 --tau 1.5 --top_frac 0.5 \
   --out_npz ./tma_out/test1_tma_t1.npz
 
 echo "===== TMA DONE ====="

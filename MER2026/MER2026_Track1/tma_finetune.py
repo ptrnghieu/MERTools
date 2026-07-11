@@ -92,7 +92,7 @@ def run_epoch(args, model, cls_loss, loader, optimizer=None, train=False, frozen
     else:
         model.eval()
 
-    all_probs, losses = [], []
+    all_probs, all_labels, losses = [], [], []
     for data in loader:
         batch, emos, vals, bnames = data
         for k in batch: batch[k] = batch[k].cuda()
@@ -110,10 +110,16 @@ def run_epoch(args, model, cls_loss, loader, optimizer=None, train=False, frozen
             optimizer.step()
             losses.append(float(loss.data.cpu().numpy()))
         else:
+            # collect preds AND labels in the SAME pass -- eval_loader uses a
+            # random sampler, so a second iteration would reshuffle and
+            # misalign labels vs preds (was the eval-WAF~random bug).
             all_probs.append(emos_out.data.cpu().numpy())
+            all_labels.append(emos.data.cpu().numpy())
     if train:
         return np.mean(losses) if losses else 0.0
-    return np.concatenate(all_probs) if all_probs else np.zeros((0, args.output_dim1))
+    probs  = np.concatenate(all_probs)  if all_probs  else np.zeros((0, args.output_dim1))
+    labels = np.concatenate(all_labels) if all_labels else np.zeros((0,), dtype=int)
+    return probs, labels
 
 
 def build_model_and_loaders(args):
@@ -125,7 +131,7 @@ def build_model_and_loaders(args):
 
 
 def save_test1_npz(args, model, test_loader, out_npz):
-    probs = run_epoch(args, model, None, test_loader, train=False)
+    probs, _ = run_epoch(args, model, None, test_loader, train=False)
     os.makedirs(os.path.dirname(out_npz) or '.', exist_ok=True)
     np.savez_compressed(out_npz, emo_probs=probs, args=np.array(args, dtype=object))
     c = Counter(probs.argmax(1).tolist())
@@ -210,10 +216,9 @@ def mode_bridge(args):
         inner.model.current_epoch = ep
         tr = run_epoch(args, model, cls_loss, train_loaders[0], optimizer, train=True)
         if sched is not None: sched.step()
-        ev = run_epoch(args, model, None, eval_loaders[0], train=False)
-        el = np.concatenate([d[1].numpy() for d in eval_loaders[0]]).astype(int)
+        ev, el = run_epoch(args, model, None, eval_loaders[0], train=False)
         from sklearn.metrics import f1_score
-        f1 = f1_score(el, ev.argmax(1), average='weighted') if len(ev) else 0.0
+        f1 = f1_score(el.astype(int), ev.argmax(1), average='weighted') if len(ev) else 0.0
         print(f'  epoch {ep+1:02d}  loss {tr:.4f}  eval-WAF {f1:.4f}')
         if f1 > best_f1:
             best_f1, no_imp = f1, 0
