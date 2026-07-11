@@ -212,6 +212,108 @@ def make_pseudo_corpus(result_npz, save_npz, tau=1.5, top_frac=0.5, min_conf=0.0
     print('next: point config.PATH_TO_LABEL[MER2026] at this npz, retrain, re-sweep tau.')
 
 
+def _fit_bcts(val_logits, val_labels, iters=500, lr=0.05):
+    """Bias-Corrected Temperature Scaling (Alexandari et al., 2020): fit a
+    scalar temperature T and per-class bias b on held-out validation by
+    minimizing NLL of softmax(logits/T + b). Returns (T, b) as numpy.
+    Calibrates the SOURCE model so its probabilities are trustworthy before
+    label-shift estimation."""
+    import torch
+    import torch.nn.functional as F
+    L = torch.tensor(val_logits, dtype=torch.float32)
+    y = torch.tensor(val_labels, dtype=torch.long)
+    logT = torch.zeros(1, requires_grad=True)
+    b    = torch.zeros(L.shape[1], requires_grad=True)
+    opt = torch.optim.Adam([logT, b], lr=lr)
+    for _ in range(iters):
+        opt.zero_grad()
+        loss = F.cross_entropy(L / torch.exp(logT) + b, y)
+        loss.backward()
+        opt.step()
+    return float(torch.exp(logT).item()), b.detach().numpy()
+
+
+def _em_label_shift(probs_target, prior_source, iters=200, tol=1e-7):
+    """Maximum Likelihood Label Shift (MLLS): EM estimate of the target class
+    prior from calibrated probabilities on the unlabelled target pool. Returns
+    the estimated target prior pi_t (idx order)."""
+    ps = prior_source / prior_source.sum()
+    pt = ps.copy()
+    for _ in range(iters):
+        w   = pt / (ps + 1e-12)                      # importance weights
+        num = probs_target * w[None, :]
+        q   = num / (num.sum(1, keepdims=True) + 1e-12)
+        new = q.mean(0)
+        new /= new.sum()
+        if np.abs(new - pt).max() < tol:
+            pt = new; break
+        pt = new
+    return pt
+
+
+def mlls_submission(result_npzs, save_csv, cv_npzs=None, verbose=True):
+    """Principled replacement for the heuristic tau label-shift (Module 4 of the
+    Cognitive-MLLM pipeline): BCTS calibration + MLLS/EM target-prior estimation.
+
+    result_npzs : comma-separated test1 npz(s) (logits over the candidate pool,
+                  candidate-csv order). Multiple are averaged (ensemble).
+    cv_npzs     : comma-separated cv npz(s) with eval_emo_probs/eval_emo_labels
+                  for BCTS calibration. If omitted, skips calibration (T=1,b=0)
+                  and runs MLLS on raw-softmax probs (EM part still applies).
+
+    Unlike tau (one scalar knob dialed blind on Codabench), MLLS solves for a
+    per-class target prior by EM on the 20k unlabelled candidates -> no tuning.
+    NB: MLLS assumes pure label shift (p(x|y) fixed); MER-Cross also has role
+    shift, so the estimate is approximate -- compare against the tau sweep on
+    Codabench and keep whichever wins.
+    """
+    from collections import Counter
+    paths = [p.strip() for p in result_npzs.split(',') if p.strip()]
+    assert paths, 'need at least one result npz'
+    stacked = None
+    for p in paths:
+        L = np.array(np.load(p, allow_pickle=True)['emo_probs'].tolist(), dtype=np.float64)
+        stacked = L if stacked is None else stacked + L
+    logits_t = stacked / len(paths)                                  # (M, C)
+
+    # BCTS calibration (optional)
+    T, b = 1.0, np.zeros(logits_t.shape[1])
+    if cv_npzs:
+        vL, vY = [], []
+        for cp in [c.strip() for c in cv_npzs.split(',') if c.strip()]:
+            d = np.load(cp, allow_pickle=True)
+            if 'eval_emo_probs' in d and len(d['eval_emo_probs']) > 0:
+                vL.append(np.array(d['eval_emo_probs'].tolist(),  dtype=np.float64))
+                vY.append(np.array(d['eval_emo_labels'].tolist()).astype(int))
+        if vL:
+            T, b = _fit_bcts(np.concatenate(vL), np.concatenate(vY))
+            if verbose: print(f'BCTS: T={T:.3f}  bias={np.round(b, 3)}')
+
+    z = logits_t / T + b[None, :]
+    z -= z.max(1, keepdims=True)
+    probs_t = np.exp(z); probs_t /= probs_t.sum(1, keepdims=True)
+
+    prior_s = _train_prior()
+    prior_t = _em_label_shift(probs_t, prior_s)
+
+    # adjusted posterior  p(c|x) * pi_t(c)/pi_s(c)
+    adj = probs_t * (prior_t / (prior_s + 1e-12))[None, :]
+    preds_idx = np.argmax(adj, 1)
+
+    if verbose:
+        n = len(preds_idx)
+        c = Counter(preds_idx.tolist())
+        print(f'\nMLLS over {len(paths)} run(s), {n} samples')
+        print(f'{"class":10s} {"prior_src":>10s} {"prior_tgt(EM)":>13s} {"pred":>8s}')
+        for i in range(len(idx2emo_mer)):
+            print(f'{idx2emo_mer[i]:10s} {prior_s[i]:10.3f} {prior_t[i]:13.3f} '
+                  f'{c[i]:6d} ({100*c[i]/n:4.1f}%)')
+
+    emo_preds = [idx2emo_mer[idx] for idx in preds_idx]
+    _write_preds_to_csv(emo_preds, save_csv)
+    print(f'\nsaved -> {save_csv}')
+
+
 if __name__ == '__main__':
     import fire
     fire.Fire()
