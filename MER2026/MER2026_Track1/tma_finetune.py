@@ -318,6 +318,13 @@ def main():
     ap.add_argument('--model', default='memocmt_v3')
     ap.add_argument('--hyper_path', default='toolkit/hyper-sweep/v3_baseline.yaml')
     ap.add_argument('--label_npz', default=None, help='real 6-way label npz (default: config)')
+    # inert args the data pipeline expects (kept at main-release defaults)
+    ap.add_argument('--train_dataset', default=None)
+    ap.add_argument('--test_dataset', default=None)
+    ap.add_argument('--train_snr', default=None)
+    ap.add_argument('--test_snr', default=None)
+    ap.add_argument('--fusion_topn', type=int, default=None)
+    ap.add_argument('--fusion_modality', default='AVT')
     # training
     ap.add_argument('--optimizer', default='adamw', choices=['adam', 'adamw'])
     ap.add_argument('--l2', type=float, default=0.00001)
