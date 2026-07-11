@@ -33,12 +33,17 @@ SYSTEM = (
     "neutral, angry, happy, sad, worried, surprise."
 )
 
-USER_TMPL = (
-    "{img_tags}\nThe images above are consecutive frames of the LISTENER's face "
-    "(silent). The SPEAKER said (Chinese): \"{transcript}\".\n"
-    "Predict the LISTENER's emotion. Reply ONLY with JSON: "
-    '{{"emotion": "<one of neutral/angry/happy/sad/worried/surprise>"}}.'
-)
+USER_HEAD = ("{img_tags}\nThe images above are consecutive frames of the LISTENER's "
+             "face (silent). ")
+USER_CTX_WITH = 'The SPEAKER said (Chinese): "{transcript}". '
+USER_CTX_NONE = 'No speaker transcript is available. '
+USER_TAIL = ("Predict the LISTENER's emotion. Reply ONLY with JSON: "
+             '{"emotion": "<one of neutral/angry/happy/sad/worried/surprise>"}.')
+
+
+def build_user(img_tags, transcript):
+    ctx = USER_CTX_WITH.format(transcript=transcript) if transcript.strip() else USER_CTX_NONE
+    return USER_HEAD.format(img_tags=img_tags) + ctx + USER_TAIL
 
 
 def uniform_idx(n, k):
@@ -143,7 +148,7 @@ def main():
                 print(f'[{k}] {name} frame FAIL: {repr(e)[:80]}'); n_skip += 1; continue
             transcript = tmap.get(name, '')
             img_tags = ''.join('<image>' for _ in imgs)
-            user = USER_TMPL.format(img_tags=img_tags, transcript=transcript)
+            user = build_user(img_tags, transcript)
             if args.mode == 'cot':
                 try:
                     assistant = cot_reason(client, args.cot_model, imgs, transcript, label)
