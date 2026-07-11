@@ -73,14 +73,17 @@ def transcript_map(subtitle_csv):
 
 
 @torch.no_grad()
-def score_labels(model, processor, frames, transcript, first_ids):
+def score_labels(model, processor, frames, transcript, first_ids, no_transcript=False):
     """First-token verbalizer scoring: ONE forward over the prompt ending in
     '{"emotion": "', read the next-token log-prob of each label's first token
     (all 6 are distinct), softmax. This is exactly what the model would
     generate, needs one forward (not six), and avoids the multi-token
     mean-logprob bias that suppressed single-token labels (e.g. happy)."""
-    ctx = CTX_WITH.format(t=transcript) if transcript.strip() else CTX_NONE
-    user_text = HEAD + ctx + TAIL
+    if no_transcript:
+        user_text = HEAD + TAIL
+    else:
+        ctx = CTX_WITH.format(t=transcript) if transcript.strip() else CTX_NONE
+        user_text = HEAD + ctx + TAIL
     messages = [
         {'role': 'system', 'content': [{'type': 'text', 'text': SYSTEM}]},
         {'role': 'user', 'content': [{'type': 'image', 'image': im} for im in frames]
@@ -106,6 +109,8 @@ def main():
     ap.add_argument('--subtitle_csv', required=True)
     ap.add_argument('--out_npz', required=True)
     ap.add_argument('--n_frames', type=int, default=8)
+    ap.add_argument('--no_transcript', action='store_true', default=False,
+                    help='video-only: drop speaker transcript (must match training)')
     ap.add_argument('--max_pixels', type=int, default=112 * 112)
     ap.add_argument('--limit', type=int, default=0)
     args = ap.parse_args()
@@ -134,7 +139,7 @@ def main():
             if crop is None:
                 raise FileNotFoundError(f'no crop for {name}')
             frames = load_frames(crop, args.n_frames)
-            p = score_labels(model, processor, frames, tmap.get(name, ''), first_ids)
+            p = score_labels(model, processor, frames, tmap.get(name, ''), first_ids, args.no_transcript)
         except Exception as e:
             print(f'[{k}] {name} FAIL: {repr(e)[:100]}')
             p = np.ones(6) / 6; n_fail += 1

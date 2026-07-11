@@ -41,7 +41,9 @@ USER_TAIL = ("Predict the LISTENER's emotion. Reply ONLY with JSON: "
              '{"emotion": "<one of neutral/angry/happy/sad/worried/surprise>"}.')
 
 
-def build_user(img_tags, transcript):
+def build_user(img_tags, transcript, no_transcript=False):
+    if no_transcript:                                # video-only: no speaker context at all
+        return USER_HEAD.format(img_tags=img_tags) + USER_TAIL
     ctx = USER_CTX_WITH.format(transcript=transcript) if transcript.strip() else USER_CTX_NONE
     return USER_HEAD.format(img_tags=img_tags) + ctx + USER_TAIL
 
@@ -114,6 +116,8 @@ def main():
     ap.add_argument('--out_jsonl', required=True)
     ap.add_argument('--n_frames', type=int, default=8)
     ap.add_argument('--mode', choices=['direct', 'cot'], default='direct')
+    ap.add_argument('--no_transcript', action='store_true', default=False,
+                    help='video-only: drop the speaker transcript (kills the text shortcut)')
     ap.add_argument('--cot_base_url', default=None, help='OpenAI-style local Qwen endpoint (cot mode)')
     ap.add_argument('--cot_model', default='qwen2.5-vl')
     ap.add_argument('--limit', type=int, default=0)
@@ -148,7 +152,7 @@ def main():
                 print(f'[{k}] {name} frame FAIL: {repr(e)[:80]}'); n_skip += 1; continue
             transcript = tmap.get(name, '')
             img_tags = ''.join('<image>' for _ in imgs)
-            user = build_user(img_tags, transcript)
+            user = build_user(img_tags, transcript, args.no_transcript)
             if args.mode == 'cot':
                 try:
                     assistant = cot_reason(client, args.cot_model, imgs, transcript, label)
