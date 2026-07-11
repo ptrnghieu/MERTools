@@ -18,9 +18,9 @@ from toolkit.utils.functions import *
 from sklearn.metrics import f1_score, accuracy_score
 
 
-def _write_preds_to_csv(emo_preds, save_csv):
+def _write_preds_to_csv(emo_preds, save_csv, candidate_csv=None):
     # names from the candidate csv (w/o gt), preserving order
-    label_csv = os.path.join(config.DATA_DIR['MER2026'], 'track1_track2_candidate.csv')
+    label_csv = candidate_csv or os.path.join(config.DATA_DIR['MER2026'], 'track1_track2_candidate.csv')
     names = func_read_key_from_csv(label_csv, 'name')
     name2key = {}
     for (name, pred) in zip(names, emo_preds):
@@ -39,24 +39,33 @@ def generate_submission(result_npz, save_csv):
     _write_preds_to_csv(emo_preds, save_csv)
 
 
-def _train_prior():
-    """Class prior over the 6 emotions, in idx order, from the train corpus."""
-    corpus = np.load(config.PATH_TO_LABEL['MER2026'], allow_pickle=True)['train_corpus'].tolist()
+def _train_prior(train_csv=None):
+    """Class prior over the 6 emotions, in idx order, from the train corpus.
+    If train_csv (name,discrete) is given, use it instead of the config label
+    npz -- lets submission run on a machine without the processed label file."""
     counts = np.zeros(len(idx2emo_mer), dtype=np.float64)
-    for v in corpus.values():
-        counts[emo2idx_mer[v['emo']]] += 1
+    if train_csv:
+        import csv as _csv
+        for r in _csv.DictReader(open(train_csv, newline='')):
+            counts[emo2idx_mer[r['discrete'].strip()]] += 1
+    else:
+        corpus = np.load(config.PATH_TO_LABEL['MER2026'], allow_pickle=True)['train_corpus'].tolist()
+        for v in corpus.values():
+            counts[emo2idx_mer[v['emo']]] += 1
     return counts / counts.sum()
 
 
-def adjust_submission(result_npz, save_csv, tau=1.0):
+def adjust_submission(result_npz, save_csv, tau=1.0, train_csv=None, candidate_csv=None):
     """Post-hoc label-shift correction: logit_adj = logit - tau * log(train_prior).
 
     tau=0 -> original argmax; tau=1 -> full shift toward uniform target;
     tau>1 -> push further toward rare classes. No retraining. Prints the
     resulting predicted class distribution so tau can be chosen by inspection.
+    train_csv/candidate_csv override the config paths (for machines without the
+    processed label npz).
     """
     logits = np.array(np.load(result_npz, allow_pickle=True)['emo_probs'].tolist(), dtype=np.float64)
-    log_prior = np.log(_train_prior() + 1e-12)
+    log_prior = np.log(_train_prior(train_csv) + 1e-12)
     adj = logits - tau * log_prior[None, :]
 
     preds_idx = np.argmax(adj, 1)
@@ -68,7 +77,7 @@ def adjust_submission(result_npz, save_csv, tau=1.0):
         print(f'   {idx2emo_mer[idx]:10s}: {c[idx]:6d} ({100*c[idx]/n:5.1f}%)')
 
     emo_preds = [idx2emo_mer[idx] for idx in preds_idx]
-    _write_preds_to_csv(emo_preds, save_csv)
+    _write_preds_to_csv(emo_preds, save_csv, candidate_csv)
 
 
 def val_report(cv_npz, tau=0.0):
@@ -257,7 +266,7 @@ def _em_label_shift(probs_target, prior_source, iters=200, tol=1e-7):
     return pt
 
 
-def mlls_submission(result_npzs, save_csv, cv_npzs=None, verbose=True):
+def mlls_submission(result_npzs, save_csv, cv_npzs=None, train_csv=None, candidate_csv=None, verbose=True):
     """Principled replacement for the heuristic tau label-shift (Module 4 of the
     Cognitive-MLLM pipeline): BCTS calibration + MLLS/EM target-prior estimation.
 
@@ -299,7 +308,7 @@ def mlls_submission(result_npzs, save_csv, cv_npzs=None, verbose=True):
     z -= z.max(1, keepdims=True)
     probs_t = np.exp(z); probs_t /= probs_t.sum(1, keepdims=True)
 
-    prior_s = _train_prior()
+    prior_s = _train_prior(train_csv)
     prior_t = _em_label_shift(probs_t, prior_s)
 
     # adjusted posterior  p(c|x) * pi_t(c)/pi_s(c)
@@ -316,7 +325,7 @@ def mlls_submission(result_npzs, save_csv, cv_npzs=None, verbose=True):
                   f'{c[i]:6d} ({100*c[i]/n:4.1f}%)')
 
     emo_preds = [idx2emo_mer[idx] for idx in preds_idx]
-    _write_preds_to_csv(emo_preds, save_csv)
+    _write_preds_to_csv(emo_preds, save_csv, candidate_csv)
     print(f'\nsaved -> {save_csv}')
 
 
