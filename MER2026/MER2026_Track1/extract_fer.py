@@ -106,7 +106,7 @@ def main():
             arr = fer.model(t).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
         np.save(out, arr)
         done += 1; dim = arr.shape[1]
-        if k < 3 or k % 1000 == 0:
+        if k < 3 or k % 200 == 0:
             print(f'[{k}/{len(names)}] {name} -> {arr.shape}')
     print(f'\nDONE: {done} extracted, {skip} skipped -> {args.out_dir}  (fer_dim={dim})')
 
