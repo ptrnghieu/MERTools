@@ -54,8 +54,8 @@ def main():
     ap.add_argument('--out_dir', required=True, help='feature output dir (= {feat_root}/{name}-FRA)')
     ap.add_argument('--model_name', default='enet_b2_8',
                     help='HSEmotion model (enet_b2_8=1408d AffectNet-8; enet_b0_8=1280d lighter)')
-    ap.add_argument('--max_frames', type=int, default=64,
-                    help='uniform frames/clip to keep (loader then compresses /12 ~ matches CLIP T)')
+    ap.add_argument('--max_frames', type=int, default=32,
+                    help='uniform frames/clip to keep (loader then compresses /12; 32 -> ~3 post-scale)')
     ap.add_argument('--device', default='cuda')
     ap.add_argument('--limit', type=int, default=0)
     args = ap.parse_args()
@@ -104,7 +104,7 @@ def main():
         sel = np.ascontiguousarray(fr[idxs])                # (n,H,W,3)
         t_load += time.time() - _t
         _t = time.time()
-        with torch.no_grad():                               # GPU resize+norm, 1 batch forward
+        with torch.no_grad(), torch.autocast('cuda', dtype=torch.float16, enabled=args.device.startswith('cuda')):
             t = torch.from_numpy(sel).to(args.device).permute(0, 3, 1, 2).float().div_(255.)
             t = F.interpolate(t, size=(size, size), mode='bilinear', align_corners=False)
             t = (t - mean) / std
