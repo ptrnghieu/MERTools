@@ -1,71 +1,154 @@
-% Compile with XeLaTeX hoặc LuaLaTeX (Unicode + tiếng Việt).
+% Compile: xelatex report_architectures.tex  (chạy 2 lần cho \cite)
 \documentclass[10pt]{article}
 \usepackage{fontspec}
-\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage[a4paper,margin=2cm]{geometry}
 \usepackage{booktabs,array,float,xcolor,colortbl}
+\usepackage{tikz}\usetikzlibrary{arrows.meta}
 \usepackage[hidelinks]{hyperref}
 \definecolor{cmblue}{RGB}{63,69,168}
+\definecolor{audiof}{RGB}{226,241,241}\definecolor{audiol}{RGB}{14,124,134}
+\definecolor{textf}{RGB}{246,236,214}\definecolor{textl}{RGB}{169,114,15}
+\definecolor{videof}{RGB}{232,232,251}\definecolor{videol}{RGB}{70,76,178}
+\definecolor{spkf}{RGB}{239,230,244}\definecolor{spkl}{RGB}{138,83,176}
+\definecolor{fusef}{RGB}{251,226,234}\definecolor{fusel}{RGB}{192,68,106}
+\definecolor{outf}{RGB}{231,236,244}\definecolor{outl}{RGB}{61,81,112}
+\definecolor{neuf}{RGB}{238,240,244}\definecolor{neul}{RGB}{108,118,136}
+\tikzset{
+ boxbase/.style={draw,rounded corners=2pt,align=center,inner sep=2.5pt,minimum height=0.8cm,font=\scriptsize,line width=0.7pt,text=black},
+ audio/.style={boxbase,fill=audiof,draw=audiol},
+ txt/.style={boxbase,fill=textf,draw=textl},
+ video/.style={boxbase,fill=videof,draw=videol},
+ spk/.style={boxbase,fill=spkf,draw=spkl},
+ fuse/.style={boxbase,fill=fusef,draw=fusel},
+ out/.style={boxbase,fill=outf,draw=outl},
+ neu/.style={boxbase,fill=neuf,draw=neul},
+ dash/.style={boxbase,fill=none,draw=neul,dashed},
+ ar/.style={-{Stealth[length=4.5pt]},gray,line width=0.7pt},
+ ard/.style={ar,dashed},
+}
 \setlength{\parskip}{4pt}\setlength{\parindent}{0pt}
-\title{\textbf{MER-Cross (MER2026 Track-1)\\ Tổng hợp kiến trúc: ý tưởng, cơ sở, và kết quả}}
+\title{\textbf{MER-Cross (MER2026 Track-1)\\ Tổng hợp kiến trúc: sơ đồ, ý tưởng, cơ sở, kết quả}}
 \author{}\date{}
 \begin{document}\maketitle
 \noindent\textbf{Bài toán.} Dự đoán cảm xúc người \emph{nghe} (listener) trong hội thoại tay đôi.
-Train = 9\,395 mẫu Individual (audio/text/video cùng người, đang nói); test = 574 mẫu
-Interlocutor (video = listener im lặng, audio/text = speaker khác). Metric = weighted-F1 (WAF)
-trên Codabench (nhiễu $\pm3$--4). Baseline tốt nhất \textbf{v3 = 65.78}~\cite{mer2026}.
+Train = 9\,395 mẫu Individual (audio/text/video cùng người, đang nói); test = 574 mẫu Interlocutor
+(video = listener im lặng, audio/text = speaker khác). Metric = weighted-F1 (WAF), Codabench, nhiễu $\pm3$--4.
+Baseline tốt nhất \textbf{v3 = 65.78}~\cite{mer2026}.
 
-\medskip\noindent\textbf{Lưu ý.} Confusion matrix \& metric per-class là \emph{in-domain}
-(held-out train), do test không có nhãn (Codabench chỉ trả WAF tổng hợp). Chúng cho biết
-model nhầm lớp nào trên train; WAF test đo khả năng transfer cross-role.
+\medskip\noindent\textbf{Lưu ý.} Confusion matrix \& metric per-class là \emph{in-domain} (held-out train)
+vì test không có nhãn. Màu khối trong sơ đồ: \textcolor{audiol}{audio},
+\textcolor{textl}{text}, \textcolor{videol}{video/listener}, \textcolor{spkl}{speaker},
+\textcolor{fusel}{fusion}; nét đứt = train-only/phụ.
 
-\section*{Bảng tổng hợp kết quả}
-\begin{table}[H]\centering\small
-\begin{tabular}{lll}
-\toprule
+\section*{Bảng tổng hợp kết quả (WAF test)}
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{lll}\toprule
 \textbf{Kiến trúc} & \textbf{WAF test} & \textbf{Ghi chú} \\ \midrule
-Pseudo-label (mix)        & 66.0 & transductive, +0.2 \\
-v3 ensemble (7-seed)      & 65.80 & giảm variance \\
-\textbf{v3 (best model)}  & \textbf{65.78} & Fix2+Fix3 \\
-v6 CM-StEW                & 65.36 & aux transfer \\
-v11 deep-sup video        & $\sim$65 & aux CE video \\
-v4/v5 fusion variants     & $\sim$64 & \\
-v2 visual-anchor          & 63--64 & \\
-v8 reliability-gate       & 63 & \\
-v7 conflict exposure      & 62--63 & \\
-TMA/BBA transductive      & 61.47 & confirmation bias \\
-FER backbone (HSEmotion)  & 59.6--61 & domain gap \\
-v9/v10 AU feature         & 60--61 & observation-shift \\
-MLLM SFT (+transcript)    & 49.84 & in-dom 0.87 \\
-MLLM video-only           & 42.8 & in-dom 0.59 \\
-MLLM zero-shot            & 42 & \\
-\bottomrule
-\end{tabular}
+Pseudo-label (mix) & 66.0 & transductive, +0.2 \\
+v3 ensemble (7-seed) & 65.80 & giảm variance \\
+\textbf{v3 (best)} & \textbf{65.78} & Fix2+Fix3 \\
+v6 CM-StEW & 65.36 & aux transfer \\
+v11 deep-sup video & $\sim$65 & aux CE \\
+v4/v5 fusion var. & $\sim$64 & \\
+v2 visual-anchor & 63--64 & \\
+v8 reliability-gate & 63 & \\
+v7 conflict expose & 62--63 & \\
+TMA/BBA & 61.47 & confirmation bias \\
+FER backbone & 59.6--61 & domain gap \\
+v9/v10 AU & 60--61 & observation-shift \\
+MLLM SFT (+text) & 49.84 & in-dom 0.87 \\
+MLLM video-only & 42.8 & in-dom 0.59 \\
+MLLM zero-shot & 42 & \\
+\bottomrule\end{tabular}
 \caption{WAF Codabench (test, 574 mẫu). Trần thông tin $\sim$66 bền vững mọi trục.}
 \end{table}
 
-\section*{MemoCMT baseline \quad\normalsize\textnormal{[v1]} \hfill \small WAF test: baseline}
+\section*{MemoCMT baseline \quad\normalsize\textnormal{[v1]} \hfill \small WAF: baseline}
 
-\textbf{Ý tưởng.}\ Nhánh speaker: cross-attention hai chiều audio$\leftrightarrow$text rồi nối và mean-pool thành một vector; nhánh listener: video qua Learnable Query Pooling; fusion: query = listener, key/value = speaker + residual.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM\\{\scriptsize\ttfamily speaker}};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa\\{\scriptsize\ttfamily speaker}};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT\\{\scriptsize\ttfamily listener}};
+\node[audio,minimum width=3.20cm,text width=2.80cm] (la) at (0.00,-1.50) {LSTM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (lt) at (3.75,-1.50) {LSTM};
+\node[video,minimum width=3.20cm,text width=2.80cm] (lv) at (7.50,-1.50) {LSTM};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (xa) at (1.88,-3.00) {Bidir Cross-Attn (a$\leftrightarrow$t)};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-3.00) {Learnable Query Pooling};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-4.50) {Concat + Mean (1 vector)};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-6.00) {Cross-Attn Fusion: Q=listener, K/V=speaker (1 token)};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (res) at (3.75,-7.50) {Residual + LayerNorm};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-9.00) {Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (la.north);
+\draw[ar] (t.south) -- (lt.north);
+\draw[ar] (v.south) -- (lv.north);
+\draw[ar] (la.south) -- (xa.north);
+\draw[ar] (lt.south) -- (xa.north);
+\draw[ar] (lv.south) -- (pl.north);
+\draw[ar] (xa.south) -- (sp.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{query} (fus.north);
+\draw[ar] (fus.south) -- (res.north);
+\draw[ard] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (res.north);
+\draw[ar] (res.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v1: gộp chung a2t+t2a rồi mean $\to$ 1 token; fusion 1-token.}
+\end{figure}
 
-\textbf{Vì sao.}\ Tái lập MemoCMT làm baseline cho hội thoại dyadic: cross-attention để hai modality bổ sung nhau, listener video làm truy vấn vì đó là đối tượng cần dự đoán.
+\textbf{Ý tưởng.}\ Speaker: cross-attention hai chiều audio$\leftrightarrow$text rồi nối+mean-pool thành một vector; listener: video qua Learnable Query Pooling; fusion Q=listener, K/V=speaker + residual.
+
+\textbf{Vì sao.}\ Tái lập MemoCMT làm baseline dyadic: cross-attention cho hai modality bổ sung nhau, listener video làm truy vấn.
 
 \textbf{Tham khảo.}\ \cite{memocmt,vaswani2017}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{MemoCMT-v3 (best) \quad\normalsize\textnormal{[v3]} \hfill \small WAF test: \textbf{65.78}}
+\clearpage
+\section*{MemoCMT-v3 (best) \quad\normalsize\textnormal{[v3]} \hfill \small WAF: \textbf{65.78}}
 
-\textbf{Ý tưởng.}\ v1 + \textbf{Fix2} (mean-pool a2t và t2a \emph{riêng} $\to$ sp\_a, sp\_t) + \textbf{Fix3} (fusion K/V = 2 token [sp\_a, sp\_t]).
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM\\{\scriptsize\ttfamily speaker}};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa\\{\scriptsize\ttfamily speaker}};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT\\{\scriptsize\ttfamily listener}};
+\node[audio,minimum width=3.20cm,text width=2.80cm] (la) at (0.00,-1.50) {LSTM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (lt) at (3.75,-1.50) {LSTM};
+\node[video,minimum width=3.20cm,text width=2.80cm] (lv) at (7.50,-1.50) {LSTM};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (xa) at (1.88,-3.00) {Bidir Cross-Attn (a$\leftrightarrow$t)};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-3.00) {Learnable Query Pooling};
+\node[spk,minimum width=3.20cm,text width=2.80cm] (spa) at (0.00,-4.50) {Mean sp\_a};
+\node[spk,minimum width=3.20cm,text width=2.80cm] (spt) at (3.75,-4.50) {Mean sp\_t};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-6.00) {Cross-Attn Fusion: Q=listener, K/V=[sp\_a,sp\_t]};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (res) at (3.75,-7.50) {Residual + LayerNorm};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-9.00) {Linear $\rightarrow$ 6 emotions};
+\draw[ar] (a.south) -- (la.north);
+\draw[ar] (t.south) -- (lt.north);
+\draw[ar] (v.south) -- (lv.north);
+\draw[ar] (la.south) -- (xa.north);
+\draw[ar] (lt.south) -- (xa.north);
+\draw[ar] (lv.south) -- (pl.north);
+\draw[ar] (xa.south) -- (spa.north);
+\draw[ar] (xa.south) -- (spt.north);
+\draw[ar] (spa.south) -- (fus.north);
+\draw[ar] (spt.south) -- (fus.north);
+\draw[ar] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{query} (fus.north);
+\draw[ar] (fus.south) -- (res.north);
+\draw[ard] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (res.north);
+\draw[ar] (res.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v3: pool a2t/t2a riêng (Fix2) + fusion 2-token [sp\_a,sp\_t] (Fix3).}
+\end{figure}
 
-\textbf{Vì sao.}\ Fix2 sửa mất cân bằng khi số token audio$\neq$text bị nuốt trong mean chung; Fix3 tránh attention suy biến khi chỉ có một token K/V. Đây là mô hình đạt WAF cao nhất.
+\textbf{Ý tưởng.}\ v1 + \textbf{Fix2} (mean-pool a2t và t2a \emph{riêng}) + \textbf{Fix3} (fusion K/V = 2 token [sp\_a, sp\_t]).
+
+\textbf{Vì sao.}\ Fix2 sửa mất cân bằng khi số token audio$\neq$text; Fix3 tránh attention suy biến khi chỉ 1 token K/V. Mô hình WAF cao nhất.
 
 \textbf{Tham khảo.}\ \cite{memocmt,vaswani2017}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!2}3 \\
 \textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 \\
@@ -75,10 +158,10 @@ MLLM zero-shot            & 42 & \\
 \textbf{sur} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!10}14 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!43}\textbf{62} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -90,45 +173,126 @@ sad & 0.842 & 0.835 & 0.839 & 1658 \\
 worried & 0.635 & 0.701 & 0.667 & 1081 \\
 surprise & 0.518 & 0.621 & 0.565 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{Visual-anchored gated fusion \quad\normalsize\textnormal{[v2]} \hfill \small WAF test: 63--64}
+\clearpage
+\section*{Visual-anchored gated fusion \quad\normalsize\textnormal{[v2]} \hfill \small WAF: 63--64}
 
-\textbf{Ý tưởng.}\ Video (BiLSTM) self-attention rồi attend sang audio \& text (query = visual); gate $g\cdot v_a+(1-g)\cdot v_t + h_v$ (residual video thô) rồi pooling.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[audio,minimum width=3.20cm,text width=2.80cm] (la) at (0.00,-1.50) {LSTM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (lt) at (3.75,-1.50) {LSTM};
+\node[video,minimum width=3.20cm,text width=2.80cm] (sv) at (7.50,-1.50) {BiLSTM + Self-Attn};
+\node[video,minimum width=3.20cm,text width=2.80cm] (cva) at (0.00,-3.00) {Cross-Attn (Q=visual, K/V=audio)};
+\node[video,minimum width=3.20cm,text width=2.80cm] (cvt) at (3.75,-3.00) {Cross-Attn (Q=visual, K/V=text)};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (g) at (3.75,-4.50) {Gate $g\cdot v_a+(1-g)\cdot v_t + h_v$ + LayerNorm};
+\node[video,minimum width=9.60cm,text width=9.20cm] (p) at (3.75,-6.00) {Learnable Query Pooling};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-7.50) {Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (la.north);
+\draw[ar] (t.south) -- (lt.north);
+\draw[ar] (v.south) -- (sv.north);
+\draw[ar] (la.south) -- (cva.north);
+\draw[ar] (lt.south) -- (cvt.north);
+\draw[ard] (sv.south) -- (cva.north);
+\draw[ard] (sv.south) -- (cvt.north);
+\draw[ar] (cva.south) -- (g.north);
+\draw[ar] (cvt.south) -- (g.north);
+\draw[ard] (sv.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{residual} (g.north);
+\draw[ar] (g.south) -- (p.north);
+\draw[ar] (p.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v2: video làm anchor, attend a/t, gate + residual video thô.}
+\end{figure}
 
-\textbf{Vì sao.}\ Ở test chỉ video (listener) là tín hiệu đáng tin và transfer được $\to$ đặt video làm trục, audio/text chỉ bổ trợ, residual giữ video khi a/t không đáng tin.
+\textbf{Ý tưởng.}\ Video (BiLSTM) self-attn rồi attend a/t (Q=visual); gate $g\cdot v_a+(1-g)\cdot v_t+h_v$ + residual, rồi pooling.
+
+\textbf{Vì sao.}\ Ở test chỉ video (listener) transfer được $\to$ đặt video làm trục, a/t bổ trợ, residual giữ video khi a/t không đáng tin.
 
 \textbf{Tham khảo.}\ \cite{arevalo2017gmu}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{Full-sequence fusion (fixed / gated) \quad\normalsize\textnormal{[v4/v5]} \hfill \small WAF test: $\sim$64}
+\clearpage
+\section*{Full-sequence fusion (fixed / gated) \quad\normalsize\textnormal{[v4/v5]} \hfill \small WAF: $\sim$64}
 
-\textbf{Ý tưởng.}\ Listener query attend \emph{toàn chuỗi} a2t và t2a riêng (frame-level); v4 trộn cố định $0.5/0.5$, v5 dùng gate học per-channel.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (xa) at (1.88,-1.50) {Bidir Cross-Attn (a$\leftrightarrow$t), full seq};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-1.50) {Query Pooling};
+\node[fuse,minimum width=3.20cm,text width=2.80cm] (fa) at (0.00,-3.00) {Cross-Attn (Q=list, K/V=a2t)};
+\node[fuse,minimum width=3.20cm,text width=2.80cm] (ft) at (3.75,-3.00) {Cross-Attn (Q=list, K/V=t2a)};
+\node[fuse,minimum width=6.40cm,text width=6.00cm] (mix) at (1.88,-4.50) {Combine: v4 $0.5/0.5$ / v5 gate $g$};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (res) at (3.75,-6.00) {Residual listener + LayerNorm};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-7.50) {Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (xa.north);
+\draw[ar] (t.south) -- (xa.north);
+\draw[ar] (v.south) -- (pl.north);
+\draw[ar] (xa.south) -- (fa.north);
+\draw[ar] (xa.south) -- (ft.north);
+\draw[ard] (pl.south) -- (fa.north);
+\draw[ard] (pl.south) -- (ft.north);
+\draw[ar] (fa.south) -- (mix.north);
+\draw[ar] (ft.south) -- (mix.north);
+\draw[ar] (mix.south) -- (res.north);
+\draw[ard] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (res.north);
+\draw[ar] (res.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v4/v5: listener attend full-seq a2t \& t2a riêng; trộn cố định (v4) / gate (v5).}
+\end{figure}
 
-\textbf{Vì sao.}\ Thử tăng độ mịn frame-level trong fusion và đảm bảo cân bằng audio/text qua softmax riêng từng modality.
+\textbf{Ý tưởng.}\ Listener query attend \emph{toàn chuỗi} a2t và t2a riêng (frame-level); v4 trộn $0.5/0.5$, v5 gate học per-channel.
+
+\textbf{Vì sao.}\ Thử tăng độ mịn frame-level và đảm bảo cân bằng audio/text qua softmax riêng từng modality.
 
 \textbf{Tham khảo.}\ \cite{vaswani2017}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{CM-StEW auxiliary transfer \quad\normalsize\textnormal{[v6]} \hfill \small WAF test: 65.36}
+\clearpage
+\section*{CM-StEW auxiliary transfer \quad\normalsize\textnormal{[v6]} \hfill \small WAF: 65.36}
 
-\textbf{Ý tưởng.}\ Backbone = v3. Train thêm: MLP dịch listener\_feat $\to$ sp\_a/sp\_t (detach, L1) + căn chỉnh cosine listener$\leftrightarrow$speaker. Chỉ lúc train.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-1.50) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-1.50) {Query Pool listener};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-3.00) {2-Token Cross-Attn Fusion + Residual (v3)};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-4.50) {Linear $\rightarrow$ 6 (CE chính)};
+\node[dash,minimum width=9.60cm,text width=9.20cm] (ax) at (3.75,-6.00) {aux (train): L1 dịch listener$\rightarrow$sp\_a/sp\_t (detach) + align cosine};
+\draw[ar] (a.south) -- (sp.north);
+\draw[ar] (t.south) -- (sp.north);
+\draw[ar] (v.south) -- (pl.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (pl.south) -- (fus.north);
+\draw[ar] (fus.south) -- (cls.north);
+\draw[ard] (pl.south) -- (ax.north);
+\draw[ard] (sp.south) -- (ax.north);
+\end{tikzpicture}
+\caption{v6: backbone v3 + CM-StEW aux (train-only).}
+\end{figure}
 
-\textbf{Vì sao.}\ Trong train (Individual) cả ba modality cùng một người, nên audio/text có thể \emph{dạy} video encoder mang thông tin cảm xúc; ở test nhánh video giàu hơn sẽ transfer.
+\textbf{Ý tưởng.}\ Backbone=v3. Train thêm: MLP dịch listener\_feat$\to$sp\_a/sp\_t (detach, L1) + align cosine. Chỉ lúc train.
+
+\textbf{Vì sao.}\ Train (Individual) ba modality cùng người $\to$ audio/text \emph{dạy} video encoder mang cảm xúc; test nhánh video giàu hơn transfer.
 
 \textbf{Tham khảo.}\ \cite{hinton2015}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!50}\textbf{72} & \cellcolor{cmblue!5}8 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
 \textbf{ang} & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!55}\textbf{78} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 \\
@@ -138,10 +302,10 @@ surprise & 0.518 & 0.621 & 0.565 & 390 \\
 \textbf{sur} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!9}13 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!7}9 & \cellcolor{cmblue!44}\textbf{63} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -153,25 +317,46 @@ sad & 0.849 & 0.838 & 0.843 & 1658 \\
 worried & 0.655 & 0.699 & 0.676 & 1081 \\
 surprise & 0.515 & 0.628 & 0.566 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7850}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7850}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{Nonverbal Conflict Exposure \quad\normalsize\textnormal{[v7]} \hfill \small WAF test: 62--63}
+\clearpage
+\section*{Nonverbal Conflict Exposure \quad\normalsize\textnormal{[v7]} \hfill \small WAF: 62--63}
 
-\textbf{Ý tưởng.}\ Backbone = v3. Lúc train, xác suất $p$ tráo audio+text của mẫu bằng của donor \emph{khác nhãn} trong batch (giữ video + nhãn).
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[dash,minimum width=6.40cm,text width=6.00cm] (sw) at (1.88,-1.50) {Conflict Swap (train): audio+text $\leftarrow$ donor khác nhãn};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-3.00) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-3.00) {Query Pool listener};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-4.50) {2-Token Cross-Attn Fusion + Residual};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-6.00) {Linear $\rightarrow$ 6};
+\draw[ard] (a.south) -- (sw.north);
+\draw[ard] (t.south) -- (sw.north);
+\draw[ar] (sw.south) -- (sp.north);
+\draw[ar] (v.south) -- (pl.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (pl.south) -- (fus.north);
+\draw[ar] (fus.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v7: backbone v3 + tráo speaker khác-nhãn lúc train (NCE).}
+\end{figure}
 
-\textbf{Vì sao.}\ Train có audio/text luôn nhất quán với nhãn; test thì thuộc speaker (có thể mâu thuẫn). Phơi bày mâu thuẫn để ép model neo vào video, không bị speaker sai vai đánh lừa.
+\textbf{Ý tưởng.}\ Backbone=v3. Lúc train, xác suất $p$ tráo audio+text bằng donor \emph{khác nhãn} trong batch (giữ video+nhãn).
+
+\textbf{Vì sao.}\ Test a/t thuộc speaker (có thể mâu thuẫn); phơi bày mâu thuẫn để ép model neo vào video.
 
 \textbf{Tham khảo.}\ \cite{ganin2016dann}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!45}\textbf{64} & \cellcolor{cmblue!9}12 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!3}4 \\
 \textbf{ang} & \cellcolor{cmblue!8}11 & \cellcolor{cmblue!48}\textbf{69} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!4}6 \\
@@ -181,10 +366,10 @@ surprise & 0.515 & 0.628 & 0.566 & 390 \\
 \textbf{sur} & \cellcolor{cmblue!7}9 & \cellcolor{cmblue!12}17 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!10}14 & \cellcolor{cmblue!34}\textbf{49} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -196,25 +381,53 @@ sad & 0.809 & 0.765 & 0.786 & 1658 \\
 worried & 0.553 & 0.626 & 0.587 & 1081 \\
 surprise & 0.370 & 0.487 & 0.420 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7184}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7184}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{Reliability-Guided Complementation \quad\normalsize\textnormal{[v8]} \hfill \small WAF test: 63}
+\clearpage
+\section*{Reliability-Guided Complementation \quad\normalsize\textnormal{[v8]} \hfill \small WAF: 63}
 
-\textbf{Ý tưởng.}\ Video anchor truy hồi tham chiếu speaker (query = video); head phụ video-only cho độ tin cậy $c_v$; $h_v^*=h_v+(1-c_v)\Delta$, head trên $[h_v^*,t_{ref},a_{ref}]$.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[video,minimum width=3.20cm,text width=2.80cm] (ra) at (0.00,-1.50) {Retrieve a\_ref (Q=h\_v)};
+\node[video,minimum width=3.20cm,text width=2.80cm] (rt) at (3.75,-1.50) {Retrieve t\_ref (Q=h\_v)};
+\node[video,minimum width=3.20cm,text width=2.80cm] (hv) at (7.50,-1.50) {Query Pool $\rightarrow$ h\_v};
+\node[neu,minimum width=3.20cm,text width=2.80cm] (aux) at (7.50,-3.00) {aux video-only $\rightarrow$ c\_v};
+\node[fuse,minimum width=6.40cm,text width=6.00cm] (d) at (1.88,-3.00) {$\Delta$ = MLP[t\_ref$-$h\_v, a\_ref$-$h\_v]};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (star) at (3.75,-4.50) {h\_v$^{*}$ = h\_v + (1$-$c\_v)$\Delta$ + LayerNorm};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-6.00) {Concat[h\_v$^{*}$, t\_ref, a\_ref] $\rightarrow$ Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (ra.north);
+\draw[ar] (t.south) -- (rt.north);
+\draw[ar] (v.south) -- (hv.north);
+\draw[ard] (hv.south) -- (ra.north);
+\draw[ard] (hv.south) -- (rt.north);
+\draw[ar] (hv.south) -- (aux.north);
+\draw[ar] (ra.south) -- (d.north);
+\draw[ar] (rt.south) -- (d.north);
+\draw[ar] (hv.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (star.north);
+\draw[ar] (d.south) -- (star.north);
+\draw[ard] (aux.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{gate} (star.north);
+\draw[ar] (star.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v8: reliability-gated complementation (video anchor + speaker theo độ tin c\_v).}
+\end{figure}
 
-\textbf{Vì sao.}\ Chỉ để speaker bổ trợ \emph{khi} video không chắc chắn; video tự tin thì nén speaker $\to$ giảm nhiễu từ modality không transfer.
+\textbf{Ý tưởng.}\ Video anchor truy hồi tham chiếu speaker (Q=video); head phụ cho $c_v$; $h_v^{*}=h_v+(1-c_v)\Delta$; head trên $[h_v^{*},t_{ref},a_{ref}]$.
+
+\textbf{Vì sao.}\ Chỉ để speaker bổ trợ khi video không chắc; video tự tin thì nén speaker $\to$ giảm nhiễu.
 
 \textbf{Tham khảo.}\ \cite{arevalo2017gmu}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!50}\textbf{71} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!5}6 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
 \textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{78} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}5 \\
@@ -224,10 +437,10 @@ surprise & 0.370 & 0.487 & 0.420 & 390 \\
 \textbf{sur} & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!8}12 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!5}8 & \cellcolor{cmblue!46}\textbf{66} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -239,25 +452,46 @@ sad & 0.839 & 0.838 & 0.838 & 1658 \\
 worried & 0.644 & 0.671 & 0.657 & 1081 \\
 surprise & 0.468 & 0.662 & 0.548 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{Deep-supervised video branch \quad\normalsize\textnormal{[v11]} \hfill \small WAF test: $\sim$65}
+\clearpage
+\section*{Deep-supervised video branch \quad\normalsize\textnormal{[v11]} \hfill \small WAF: $\sim$65}
 
-\textbf{Ý tưởng.}\ Backbone = v3. Train thêm CE phụ chỉ trên listener\_feat (video-only head).
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-1.50) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-1.50) {Query Pool listener};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-3.00) {2-Token Cross-Attn Fusion + Residual (v3)};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-4.50) {Linear $\rightarrow$ 6 (CE chính)};
+\node[dash,minimum width=3.20cm,text width=2.80cm] (ax) at (7.50,-6.00) {aux CE video-only};
+\draw[ar] (a.south) -- (sp.north);
+\draw[ar] (t.south) -- (sp.north);
+\draw[ar] (v.south) -- (pl.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (pl.south) -- (fus.north);
+\draw[ar] (fus.south) -- (cls.north);
+\draw[ard] (pl.south) -- (ax.north);
+\end{tikzpicture}
+\caption{v11: backbone v3 + deep-supervision CE trên listener\_feat.}
+\end{figure}
 
-\textbf{Vì sao.}\ In-domain audio/text mạnh nên fusion đạt loss thấp mà không cần video tốt (video ``lười''). Deep supervision ép nhánh video tự phân biệt cảm xúc $\to$ anchor mạnh hơn cho test.
+\textbf{Ý tưởng.}\ Backbone=v3. Train thêm CE phụ chỉ trên listener\_feat.
+
+\textbf{Vì sao.}\ In-domain a/t mạnh nên video ``lười''; deep supervision ép nhánh video tự phân biệt cảm xúc $\to$ anchor mạnh cho test.
 
 \textbf{Tham khảo.}\ \cite{lee2015dsn}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
 \textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 \\
@@ -267,10 +501,10 @@ surprise & 0.468 & 0.662 & 0.548 & 390 \\
 \textbf{sur} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!11}16 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!43}\textbf{61} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -282,45 +516,118 @@ sad & 0.840 & 0.830 & 0.835 & 1658 \\
 worried & 0.648 & 0.696 & 0.671 & 1081 \\
 surprise & 0.506 & 0.610 & 0.553 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7792}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7792}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{FACS Action-Unit features \quad\normalsize\textnormal{[v9/v10]} \hfill \small WAF test: 60--61}
+\clearpage
+\section*{FACS Action-Unit features \quad\normalsize\textnormal{[v9/v10]} \hfill \small WAF: 60--61}
 
-\textbf{Ý tưởng.}\ Feature video = CLIP $\oplus$ AU (py-feat). v9: hai nhánh (CLIP-enc, AU-enc) $\to$ gated embedding; v10: giữ CLIP làm anchor, au\_feat thêm làm token K/V thứ 3.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP $\oplus$ AU};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-1.50) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (clip) at (7.50,-1.50) {CLIP enc + pool};
+\node[neu,minimum width=3.20cm,text width=2.80cm] (au) at (7.50,-3.00) {AU enc + pool (au\_feat)};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-4.50) {Fusion: v9 [sp\_a,sp\_t] / v10 [sp\_a,sp\_t,au\_feat]};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-6.00) {Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (sp.north);
+\draw[ar] (t.south) -- (sp.north);
+\draw[ar] (v.south) -- (clip.north);
+\draw[ar] (v.south) -- (au.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (clip.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (fus.north);
+\draw[ard] (au.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{v9 merge / v10 token} (fus.north);
+\draw[ar] (fus.south) -- (cls.north);
+\end{tikzpicture}
+\caption{v9/v10: thêm FACS Action-Unit vào nhánh video.}
+\end{figure}
 
-\textbf{Vì sao.}\ AU (FACS) là tín hiệu biểu cảm bất biến danh tính, kỳ vọng bổ sung cho CLIP. Thực tế bị \emph{observation-shift}: speaker nói kích hoạt mouth-AU cấu âm, listener im lặng thì không $\to$ hại.
+\textbf{Ý tưởng.}\ Feature video = CLIP$\oplus$AU. v9: hai nhánh gated embedding; v10: CLIP anchor + au\_feat làm token K/V thứ 3.
+
+\textbf{Vì sao.}\ AU (FACS) là biểu cảm bất biến danh tính. Thực tế bị observation-shift: speaker nói kích hoạt mouth-AU, listener im lặng thì không.
 
 \textbf{Tham khảo.}\ \cite{ekman1978facs,cheong2023pyfeat}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{Asymmetric VIB-FiLM fusion \quad\normalsize\textnormal{[v12]} \hfill \small WAF test: (đang chạy)}
+\clearpage
+\section*{Asymmetric VIB-FiLM fusion \quad\normalsize\textnormal{[v12]} \hfill \small WAF: (đang chạy)}
 
-\textbf{Ý tưởng.}\ Video = anchor; speaker (sp\_a,sp\_t) nén qua Variational Information Bottleneck $\to$ code $z$ $\to$ sinh FiLM $(\gamma,\beta)$ điều chế listener\_feat. FiLM zero-init; VIB KL = loss train-only.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {CLIP-ViT};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-1.50) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-1.50) {Query Pool listener};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (proj) at (1.88,-3.00) {concat[sp\_a,sp\_t] $\rightarrow$ Linear};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (vib) at (1.88,-4.50) {VIB: $\mu,\log\sigma^2 \rightarrow z$};
+\node[fuse,minimum width=3.20cm,text width=2.80cm] (film) at (7.50,-4.50) {FiLM: $\gamma\odot$listener$+\beta$};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (res) at (3.75,-6.00) {Residual listener + LayerNorm};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-7.50) {Linear $\rightarrow$ 6};
+\node[dash,minimum width=6.40cm,text width=6.00cm] (kl) at (1.88,-9.00) {VIB KL$(z\|\mathcal{N}(0,1))\times\beta_{vib}$ (train)};
+\draw[ar] (a.south) -- (sp.north);
+\draw[ar] (t.south) -- (sp.north);
+\draw[ar] (v.south) -- (pl.north);
+\draw[ar] (sp.south) -- (proj.north);
+\draw[ar] (proj.south) -- (vib.north);
+\draw[ar] (vib.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{$\gamma,\beta$} (film.north);
+\draw[ar] (pl.south) -- node[midway,font=\tiny,fill=white,inner sep=1pt]{anchor} (film.north);
+\draw[ar] (film.south) -- (res.north);
+\draw[ard] (pl.south) -- (res.north);
+\draw[ar] (res.south) -- (cls.north);
+\draw[ard] (vib.south) -- (kl.north);
+\end{tikzpicture}
+\caption{v12: video anchor; speaker nén VIB $\to$ FiLM điều chế (bất đối xứng).}
+\end{figure}
 
-\textbf{Vì sao.}\ Bất đối xứng bản thể: video là bằng chứng trực tiếp, audio/text chỉ là kích thích ngoại lai. VIB lọc bỏ đặc trưng speaker không transfer, FiLM để speaker \emph{điều chỉnh} chứ không lấn át video.
+\textbf{Ý tưởng.}\ Video anchor; speaker nén qua VIB $\to z\to$ FiLM $(\gamma,\beta)$ điều chế listener\_feat. FiLM zero-init; VIB KL train-only.
+
+\textbf{Vì sao.}\ Bất đối xứng: video = bằng chứng trực tiếp, a/t = kích thích ngoại lai; VIB lọc đặc trưng speaker không transfer, FiLM để speaker điều chỉnh không lấn át.
 
 \textbf{Tham khảo.}\ \cite{alemi2017,perez2018}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{FER-specialised video backbone \quad\normalsize\textnormal{[FER]} \hfill \small WAF test: 59.6--61}
+\clearpage
+\section*{FER-specialised video backbone \quad\normalsize\textnormal{[FER]} \hfill \small WAF: 59.6--61}
 
-\textbf{Ý tưởng.}\ Thay CLIP bằng embedding từ HSEmotion (EfficientNet-B2, pretrained AffectNet-8); kiến trúc v3 giữ nguyên audio/text/fusion.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[audio,minimum width=3.20cm,text width=2.80cm] (a) at (0.00,-0.00) {WavLM};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (t) at (3.75,-0.00) {RoBERTa};
+\node[video,minimum width=3.20cm,text width=2.80cm] (v) at (7.50,-0.00) {Face crops};
+\node[video,minimum width=3.20cm,text width=2.80cm] (fer) at (7.50,-1.50) {HSEmotion enet\_b2\_8\\{\scriptsize\ttfamily AffectNet-8, frozen}};
+\node[spk,minimum width=6.40cm,text width=6.00cm] (sp) at (1.88,-3.00) {Speaker Bi-Cross-Attn $\rightarrow$ sp\_a, sp\_t};
+\node[video,minimum width=3.20cm,text width=2.80cm] (pl) at (7.50,-3.00) {FER feat + Query Pool};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (fus) at (3.75,-4.50) {2-Token Cross-Attn Fusion + Residual (v3)};
+\node[out,minimum width=9.60cm,text width=9.20cm] (cls) at (3.75,-6.00) {Linear $\rightarrow$ 6};
+\draw[ar] (a.south) -- (sp.north);
+\draw[ar] (t.south) -- (sp.north);
+\draw[ar] (v.south) -- (fer.north);
+\draw[ar] (fer.south) -- (pl.north);
+\draw[ar] (sp.south) -- (fus.north);
+\draw[ar] (pl.south) -- (fus.north);
+\draw[ar] (fus.south) -- (cls.north);
+\end{tikzpicture}
+\caption{FER: thay CLIP bằng HSEmotion (AffectNet); phần còn lại = v3.}
+\end{figure}
 
-\textbf{Vì sao.}\ Kỳ vọng vision chuyên biểu cảm bắt vi biểu cảm listener tốt hơn CLIP generic. Thực tế thua CLIP: HSEmotion train trên mặt posed/biểu cảm mạnh $\neq$ mặt listener hội thoại tinh tế (domain gap).
+\textbf{Ý tưởng.}\ Thay CLIP bằng HSEmotion (EfficientNet-B2, AffectNet-8); v3 giữ nguyên audio/text/fusion.
+
+\textbf{Vì sao.}\ Kỳ vọng vision chuyên biểu cảm bắt vi biểu cảm tốt hơn. Thua CLIP: AffectNet posed $\neq$ mặt listener hội thoại (domain gap).
 
 \textbf{Tham khảo.}\ \cite{savchenko2022,mollahosseini2017}
 
-\begin{table}[H]\centering\small
-\setlength{\tabcolsep}{4pt}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
 \midrule
 \textbf{neu} & \cellcolor{cmblue!47}\textbf{67} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!3}4 \\
 \textbf{ang} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!3}4 \\
@@ -330,10 +637,10 @@ surprise & 0.506 & 0.610 & 0.553 & 390 \\
 \textbf{sur} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!9}12 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!46}\textbf{66} \\
 \bottomrule
 \end{tabular}
-\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
 \end{table}
 
-\begin{table}[H]\centering\small
+\begin{table}[H]\centering\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
@@ -345,64 +652,84 @@ sad & 0.804 & 0.835 & 0.820 & 1658 \\
 worried & 0.633 & 0.688 & 0.659 & 1081 \\
 surprise & 0.487 & 0.659 & 0.560 & 390 \\
 \midrule
-\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7713}} \\
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7713}} \\
 \bottomrule
 \end{tabular}
-\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\caption{Per-class precision/recall/F1 (in-domain).}
 \end{table}
 
-\section*{Qwen2.5-VL QLoRA + verbalizer \quad\normalsize\textnormal{[MLLM]} \hfill \small WAF test: 42--50 (in-dom 0.59--0.87)}
+\clearpage
+\section*{Qwen2.5-VL QLoRA + verbalizer \quad\normalsize\textnormal{[MLLM]} \hfill \small WAF: 42--50}
 
-\textbf{Ý tưởng.}\ Frame mặt listener + transcript speaker $\to$ prompt vai $\to$ LoRA sinh nhãn; infer bằng log-prob first-token của 6 nhãn (verbalizer). Biến thể video-only bỏ transcript.
+\begin{figure}[H]\centering
+\begin{tikzpicture}
+\node[video,minimum width=3.20cm,text width=2.80cm] (fr) at (0.00,-0.00) {8 frame mặt listener\\{\scriptsize\ttfamily crop 112^2}};
+\node[txt,minimum width=3.20cm,text width=2.80cm] (tr) at (7.50,-0.00) {Transcript speaker};
+\node[video,minimum width=3.20cm,text width=2.80cm] (vit) at (0.00,-1.50) {Qwen ViT (frozen)};
+\node[neu,minimum width=6.40cm,text width=6.00cm] (pr) at (5.62,-1.50) {Prompt vai (role-explicit)};
+\node[fuse,minimum width=9.60cm,text width=9.20cm] (llm) at (3.75,-3.00) {Qwen2.5-VL-7B + LoRA (QLoRA 4-bit)};
+\node[out,minimum width=6.40cm,text width=6.00cm] (sft) at (1.88,-4.50) {SFT: target = \{emotion: nhãn\}};
+\node[out,minimum width=3.20cm,text width=2.80cm] (inf) at (7.50,-4.50) {Verbalizer log-prob};
+\node[out,minimum width=9.60cm,text width=9.20cm] (out) at (3.75,-6.00) {softmax 6 nhãn $\rightarrow$ logits $\rightarrow$ submission};
+\draw[ar] (fr.south) -- (vit.north);
+\draw[ar] (vit.south) -- (llm.north);
+\draw[ar] (tr.south) -- (pr.north);
+\draw[ar] (pr.south) -- (llm.north);
+\draw[ar] (llm.south) -- (sft.north);
+\draw[ar] (llm.south) -- (inf.north);
+\draw[ar] (inf.south) -- (out.north);
+\end{tikzpicture}
+\caption{MLLM: Qwen2.5-VL QLoRA fine-tune + verbalizer inference.}
+\end{figure}
 
-\textbf{Vì sao.}\ Thử đưa reasoning/world-knowledge của MLLM. Thất bại: vision generic (ViT freeze) trên crop $112^2$ đọc micro-expression yếu (video-only 42.8); in-domain 0.87 nhưng test 0.50 $\to$ nút thắt là tri giác thị giác, không phải reasoning.
+\textbf{Ý tưởng.}\ Frame mặt + transcript $\to$ prompt vai $\to$ LoRA sinh nhãn; infer log-prob first-token 6 nhãn. Biến thể video-only bỏ transcript.
+
+\textbf{Vì sao.}\ Thử reasoning MLLM. Thất bại: vision generic (ViT freeze) trên crop $112^2$ đọc micro-expression yếu; in-domain 0.87 nhưng test 0.50 $\to$ nút thắt là tri giác, không phải reasoning.
 
 \textbf{Tham khảo.}\ \cite{qwen25vl,dettmers2023,schick2021}
 
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
-\section*{Pseudo-label / TMA-BBA \quad\normalsize\textnormal{[Transductive]} \hfill \small WAF test: 66.0 / 61.47}
+\clearpage
+\section*{Pseudo-label / TMA-BBA \quad\normalsize\textnormal{[Transductive]} \hfill \small WAF: 66.0 / 61.47}
 
-\textbf{Ý tưởng.}\ Dùng 20k candidate không nhãn: (a) pseudo-label trộn vào train, retrain; (b) TMA/BBA: v3 làm bridge, re-init head, train thuần trên pseudo pool.
+\textbf{Ý tưởng.}\ 20k candidate không nhãn: (a) pseudo-label trộn vào train; (b) TMA/BBA: v3 làm bridge, re-init head, train thuần pseudo pool.
 
-\textbf{Vì sao.}\ Khai thác dữ liệu target không nhãn. Pseudo-mix chỉ +0.2 (talking-face vẫn lấn át); TMA/BBA $-4.3$ do bẫy thiên kiến xác nhận (distill nhãn giả cứng làm nghèo model).
+\textbf{Vì sao.}\ Khai thác target không nhãn. Pseudo-mix +0.2; TMA/BBA $-4.3$ do bẫy thiên kiến xác nhận.
 
 \textbf{Tham khảo.}\ \cite{liang2020shot,zhu2025bba}
 
-\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+\clearpage
+\section*{Post-hoc calibration ($\tau$ / MLLS) \quad\normalsize\textnormal{[Label-shift]} \hfill \small WAF: (hậu kỳ)}
 
-\section*{Post-hoc calibration ($\tau$ / MLLS) \quad\normalsize\textnormal{[Label-shift]} \hfill \small WAF test: (hậu kỳ)}
+\textbf{Ý tưởng.}\ $\text{logit}-\tau\log(\text{train\_prior})$ ($\tau=2.5$); hoặc BCTS + MLLS (EM ước lượng prior target trên 20k).
 
-\textbf{Ý tưởng.}\ Hiệu chỉnh dịch nhãn hậu kỳ: $\text{logit}-\tau\log(\text{train\_prior})$ ($\tau=2.5$); hoặc BCTS + MLLS (EM ước lượng prior target trên 20k).
-
-\textbf{Vì sao.}\ Phân phối lớp train $\neq$ test $\to$ hiệu chỉnh prior. $\tau$ giúp ổn định (+); MLLS có nguyên lý hơn nhưng bị vi phạm giả định label-shift (còn role-shift).
+\textbf{Vì sao.}\ Phân phối lớp train$\neq$test $\to$ hiệu chỉnh prior. $\tau$ ổn định (+); MLLS có nguyên lý hơn nhưng bị vi phạm giả định label-shift.
 
 \textbf{Tham khảo.}\ \cite{lipton2018,alexandari2020}
-
-\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
 
 \begin{thebibliography}{99}
 \bibitem{memocmt} \emph{MemoCMT: Multimodal emotion recognition using cross-modal transformer-based feature fusion}, 2025.
 \bibitem{vaswani2017} A. Vaswani et al., \emph{Attention Is All You Need}, NeurIPS 2017.
-\bibitem{arevalo2017gmu} J. Arevalo et al., \emph{Gated Multimodal Units for Information Fusion}, ICLR Workshop 2017.
-\bibitem{hinton2015} G. Hinton, O. Vinyals, J. Dean, \emph{Distilling the Knowledge in a Neural Network}, 2015.
+\bibitem{arevalo2017gmu} J. Arevalo et al., \emph{Gated Multimodal Units for Information Fusion}, ICLR-W 2017.
+\bibitem{hinton2015} G. Hinton et al., \emph{Distilling the Knowledge in a Neural Network}, 2015.
 \bibitem{ganin2016dann} Y. Ganin et al., \emph{Domain-Adversarial Training of Neural Networks}, JMLR 2016.
 \bibitem{lee2015dsn} C.-Y. Lee et al., \emph{Deeply-Supervised Nets}, AISTATS 2015.
 \bibitem{ekman1978facs} P. Ekman, W. Friesen, \emph{Facial Action Coding System}, 1978.
 \bibitem{cheong2023pyfeat} J. Cheong et al., \emph{Py-Feat: Python Facial Expression Analysis Toolbox}, 2023.
 \bibitem{alemi2017} A. Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017.
 \bibitem{perez2018} E. Perez et al., \emph{FiLM: Visual Reasoning with a General Conditioning Layer}, AAAI 2018.
-\bibitem{savchenko2022} A. Savchenko, \emph{HSEmotion: Facial expression recognition with EfficientNet on AffectNet}, 2022.
-\bibitem{mollahosseini2017} A. Mollahosseini et al., \emph{AffectNet: A Database for Facial Expression, Valence, and Arousal}, IEEE TAC 2017.
+\bibitem{savchenko2022} A. Savchenko, \emph{HSEmotion: EfficientNet on AffectNet}, 2022.
+\bibitem{mollahosseini2017} A. Mollahosseini et al., \emph{AffectNet}, IEEE TAC 2017.
 \bibitem{qwen25vl} Qwen Team, \emph{Qwen2.5-VL Technical Report}, 2025.
-\bibitem{dettmers2023} T. Dettmers et al., \emph{QLoRA: Efficient Finetuning of Quantized LLMs}, NeurIPS 2023.
-\bibitem{schick2021} T. Schick, H. Sch\"utze, \emph{Exploiting Cloze-Questions for Few-Shot Text Classification (PET)}, EACL 2021.
-\bibitem{liang2020shot} J. Liang et al., \emph{Do We Really Need to Access the Source Data? (SHOT)}, ICML 2020.
-\bibitem{zhu2025bba} J. Zhu et al., \emph{Bridge Then Begin Anew: Generating Target-Relevant Intermediate Model for Source-Free VER}, AAAI 2025.
+\bibitem{dettmers2023} T. Dettmers et al., \emph{QLoRA}, NeurIPS 2023.
+\bibitem{schick2021} T. Schick, H. Sch\"utze, \emph{Exploiting Cloze-Questions (PET)}, EACL 2021.
+\bibitem{liang2020shot} J. Liang et al., \emph{SHOT: Do We Really Need Source Data?}, ICML 2020.
+\bibitem{zhu2025bba} J. Zhu et al., \emph{Bridge Then Begin Anew}, AAAI 2025.
 \bibitem{lipton2018} Z. Lipton et al., \emph{Detecting and Correcting for Label Shift (BBSE)}, ICML 2018.
-\bibitem{alexandari2020} A. Alexandari et al., \emph{Maximum Likelihood with Bias-Corrected Calibration (MLLS)}, ICML 2020.
-\bibitem{mer2026} \emph{MER 2026: From Discriminative Emotion Recognition to Generative Emotion Understanding}, arXiv:2604.19417.
+\bibitem{alexandari2020} A. Alexandari et al., \emph{Maximum Likelihood Label Shift (MLLS)}, ICML 2020.
+\bibitem{mer2026} \emph{MER 2026: From Discriminative to Generative Emotion Understanding}, arXiv:2604.19417.
 \end{thebibliography}
 
 \end{document}
