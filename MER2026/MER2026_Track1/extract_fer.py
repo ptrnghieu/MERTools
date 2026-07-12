@@ -66,12 +66,21 @@ def main():
     _orig_load = torch.load
     torch.load = functools.partial(_orig_load, weights_only=False)
 
+    import torch.nn.functional as F
     from hsemotion.facial_emotions import HSEmotionRecognizer
-    from PIL import Image
     fer = HSEmotionRecognizer(model_name=args.model_name, device=args.device)
     torch.load = _orig_load                         # restore
     fer.model.eval()
-    tf = fer.test_transforms                         # Resize(260)+ToTensor+Normalize
+    # replicate test_transforms (Resize -> ToTensor -> Normalize) on GPU to kill
+    # the PIL CPU bottleneck. Derive the input size from the transform.
+    size = 260
+    for tr in getattr(fer.test_transforms, 'transforms', []):
+        s = getattr(tr, 'size', None)
+        if s is not None:
+            size = s[0] if isinstance(s, (tuple, list)) else s
+    mean = torch.tensor([0.485, 0.456, 0.406], device=args.device).view(1, 3, 1, 1)
+    std  = torch.tensor([0.229, 0.224, 0.225], device=args.device).view(1, 3, 1, 1)
+    print(f'GPU preprocess: resize->{size}, imagenet-norm')
 
     os.makedirs(args.out_dir, exist_ok=True)
     names = sorted(d for d in os.listdir(args.face_root)
@@ -89,9 +98,12 @@ def main():
             print(f'[{k}] {name} no crop'); continue
         fr = np.load(crop)                                  # (T,H,W,3) uint8 RGB
         idxs = uniform_idx(len(fr), min(args.max_frames, len(fr)))
-        with torch.no_grad():                               # batch ALL frames -> 1 forward
-            batch = torch.stack([tf(Image.fromarray(fr[i]).convert('RGB')) for i in idxs]).to(args.device)
-            arr = fer.model(batch).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
+        sel = np.ascontiguousarray(fr[idxs])                # (n,H,W,3)
+        with torch.no_grad():                               # GPU resize+norm, 1 batch forward
+            t = torch.from_numpy(sel).to(args.device).permute(0, 3, 1, 2).float().div_(255.)
+            t = F.interpolate(t, size=(size, size), mode='bilinear', align_corners=False, antialias=True)
+            t = (t - mean) / std
+            arr = fer.model(t).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
         np.save(out, arr)
         done += 1; dim = arr.shape[1]
         if k < 3 or k % 1000 == 0:
