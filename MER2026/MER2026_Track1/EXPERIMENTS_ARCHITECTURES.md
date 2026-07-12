@@ -278,6 +278,76 @@ info) = làm nghèo thầy; đồng thời **vứt train thật** — hoá ra tr
 
 ---
 
+## Nhóm F — Fusion bất đối xứng (v12) · VIB-FiLM
+
+**Chỉ đổi fusion** (encoders + speaker branch + listener pool = v3). Video =
+anchor; speaker audio/text nén qua **VIB** → sinh **FiLM (γ,β)** điều chế anchor.
+FiLM zero-init → khởi động pure-video-anchor. VIB KL = interloss train-only.
+
+```mermaid
+flowchart TD
+  A["audio"]-->AE["LSTM"]-->A2T["a2t→sp_a"]
+  T["text"]-->TE["LSTM"]-->T2A["t2a→sp_t"]
+  V["video"]-->VE["LSTM"]-->LP["QueryPool → listener_feat (ANCHOR)"]
+  A2T-->CAT["concat[sp_a,sp_t]→sp_proj→sp"]
+  T2A-->CAT
+  CAT-->VIB["VIB: μ,logvar → z (train: μ+ε·σ, eval: μ)"]
+  VIB-->G["film_gamma(z)=γ"]
+  VIB-->B["film_beta(z)=β"]
+  LP-->FILM["FiLM: γ⊙listener + β"]
+  G-->FILM
+  B-->FILM
+  FILM-->ADD["+ residual listener → LN"]
+  LP -. anchor .-> ADD
+  ADD-->FC["fc → 6 lớp"]
+  VIB -. "train: KL×β_vib → interloss" .-> KL["VIB loss"]
+```
+
+---
+
+## Nhóm G — MLLM (Qwen2.5-VL-7B, QLoRA) · 42–50 ✗
+
+Bỏ hẳn feature-fusion. Đưa **frame mặt thô** + transcript vào VLM, fine-tune LoRA
+sinh nhãn; infer bằng verbalizer scoring (log-prob 6 nhãn). Thất bại vì **vision
+generic + freeze + mặt 112² thấp** đọc micro-expression yếu (video-only 42.8).
+
+```mermaid
+flowchart LR
+  subgraph TRAIN["SFT (train Individual)"]
+    FR["8 frame mặt (crop)"] --> VIS["Qwen ViT (freeze)"]
+    TR["transcript speaker"] --> PR["prompt role-explicit (FACS)"]
+    VIS --> PR
+    PR --> LORA["Qwen LLM + LoRA 4-bit"]
+    LORA --> TGT["target = {emotion: nhãn}"]
+  end
+  subgraph INFER["inference 20k candidate"]
+    LORA2["model đã tune"] --> VERB["verbalizer: log-prob first-token của 6 nhãn"]
+    VERB --> SM["softmax → logits npz"]
+    SM --> SUB["submission (adjust/MLLS)"]
+  end
+```
+*(Biến thể video-only = bỏ nhánh transcript → 42.8; có transcript → 49.84.)*
+
+---
+
+## Nhóm H — FER backbone (thay CLIP) · 59.6–61 ✗
+
+Thay feature video CLIP bằng embedding từ model **chuyên FER** (HSEmotion,
+AffectNet-8). Kiến trúc v3 giữ nguyên phần audio/text/fusion. Thất bại vì FER
+train trên **mặt posed/biểu cảm mạnh** ≠ mặt listener hội thoại tinh tế.
+
+```mermaid
+flowchart LR
+  V["face crops (32 frame)"] --> FER["HSEmotion enet_b2_8 (AffectNet-8, freeze)"]
+  FER --> F["per-frame 1408-d → feature -FRA (thay clip-vit-large)"]
+  F --> V3["v3: audio/text/fusion NGUYÊN VẸN, chỉ đổi video feature"]
+  A["wavlm"] --> V3
+  T["roberta"] --> V3
+  V3 --> OUT["WAF 59.6–61 (thua CLIP 65.78)"]
+```
+
+---
+
 ## Kết luận xuyên suốt
 
 Ba trục của nhánh video — **capacity** (v2), **information** (v9/v10),
