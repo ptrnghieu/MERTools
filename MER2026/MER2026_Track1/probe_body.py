@@ -167,8 +167,22 @@ def sample_video_frames(path, k):
     return frames, wh
 
 
+def load_cascade():
+    """Return a haar face cascade, or None if this cv2 build lacks objdetect."""
+    try:
+        c = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        if c.empty():
+            return None
+        return c
+    except Exception:
+        return None
+
+
 def face_coverage(frame, cascade):
     """Return (coverage_ratio_or_None, bbox_or_None). None => no face found."""
+    if cascade is None:
+        return None, None
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4,
                                      minSize=(24, 24))
@@ -284,8 +298,11 @@ def main():
         return
 
     # Measure coverage + collect thumbnails.
-    cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    cascade = load_cascade()
+    if cascade is None:
+        print('\n(!) cv2 has no working face detector on this box -- skipping '
+              'coverage numbers; the montage + frame sizes still answer '
+              'body-in-frame by eye.')
     covs, sizes_wh, no_face, thumbs = [], [], 0, []
     for p in local_videos:
         frames, wh = sample_video_frames(p, args.frames_per_clip)
@@ -323,6 +340,25 @@ def main():
                        'tension only; no arms/torso). Modest upside.')
         else:
             verdict = 'WIDE framing -> #2 VIABLE (body/arms available). Proceed to build.'
+    elif cascade is None:
+        # No detector -> lean on frame geometry. Face crops are small & squarish
+        # (112/224, aspect~1); real scene frames are larger and usually 4:3/16:9.
+        med = None
+        if sizes_wh:
+            mw, mh = int(np.median(ws)), int(np.median(hs))
+            ar = mw / float(mh) if mh else 1.0
+            small = max(mw, mh) <= 260
+            square = 0.85 <= ar <= 1.18
+            if small and square:
+                verdict = (f'frames are small & square ({mw}x{mh}) -> almost '
+                           'certainly a FACE crop -> #2 likely INFEASIBLE. '
+                           'Confirm on the montage.')
+            else:
+                verdict = (f'frames are scene-sized ({mw}x{mh}, aspect {ar:.2f}) '
+                           '-> full frames, NOT face crops -> body plausibly in '
+                           'view. Judge head-vs-body extent on the montage.')
+        else:
+            verdict = 'could not read frame sizes -- inspect montage by eye.'
     else:
         verdict = ('no faces detected in any sampled frame -- inspect montage by '
                    'eye; could be wide framing (good for #2) or a read error.')
