@@ -70,7 +70,8 @@ def main():
     from hsemotion.facial_emotions import HSEmotionRecognizer
     fer = HSEmotionRecognizer(model_name=args.model_name, device=args.device)
     torch.load = _orig_load                         # restore
-    fer.model.eval()
+    fer.model = fer.model.to(args.device).eval()    # some hsemotion builds leave the model on CPU
+    print('model device:', next(fer.model.parameters()).device)
     # replicate test_transforms (Resize -> ToTensor -> Normalize) on GPU to kill
     # the PIL CPU bottleneck. Derive the input size from the transform.
     size = 260
