@@ -99,16 +99,17 @@ def read_frames(video_bytes, max_frames, name):
 
 def crop_faces(frames, mtcnn, margin, out_size):
     """Detect the largest face per frame, crop with margin at native res, return
-    list of PIL images (out_size square). Frames with no face -> center square."""
+    (crops, n_fallback). Frames with no detected face -> center-square fallback."""
     pil = [Image.fromarray(f) for f in frames]
     try:
         boxes, probs = mtcnn.detect(pil)
     except Exception:
         boxes = [None] * len(pil)
-    crops = []
+    crops, n_fallback = [], 0
     for img, box in zip(pil, boxes if boxes is not None else [None] * len(pil)):
         W, H = img.size
-        if box is not None and len(box):
+        has = box is not None and len(box)
+        if has:
             # largest by area
             b = max(box, key=lambda q: (q[2] - q[0]) * (q[3] - q[1]))
             x1, y1, x2, y2 = b
@@ -118,11 +119,12 @@ def crop_faces(frames, mtcnn, margin, out_size):
             x2, y2 = min(W, x2 + mx), min(H, y2 + my)
             crop = img.crop((int(x1), int(y1), int(x2), int(y2)))
         else:
+            n_fallback += 1
             s = min(W, H)  # center square fallback
             crop = img.crop(((W - s) // 2, (H - s) // 2,
                              (W - s) // 2 + s, (H - s) // 2 + s))
         crops.append(crop.resize((out_size, out_size), Image.BICUBIC))
-    return crops
+    return crops, n_fallback
 
 
 def iter_members(args):
@@ -182,6 +184,9 @@ def main():
                          '(near-zero disk); default downloads the zip once')
     ap.add_argument('--dl_dir', default='/workspace/_zip_dl')
     ap.add_argument('--limit', type=int, default=0, help='smoke: first N clips')
+    ap.add_argument('--dump_crops', type=int, default=0,
+                    help='save the CLIP-input crops of the first N clips to '
+                         '{out_dir}/_crops/ as JPGs for a visual quality check')
     ap.add_argument('--hf_token', default=os.environ.get('HF_TOKEN') or None)
     ap.add_argument('--upload_repo', default='')
     args = ap.parse_args()
@@ -216,8 +221,12 @@ def main():
                if f.endswith('.npy'))
     print(f'resuming: {len(done)} already extracted')
 
+    if args.dump_crops:
+        os.makedirs(os.path.join(args.out_dir, '_crops'), exist_ok=True)
+
     t0 = time.time()
     n_ok = n_skip = n_err = 0
+    tot_frames = tot_fallback = 0
     for i, (name, vb) in enumerate(iter_members(args)):
         if args.limit and i >= args.limit:
             break
@@ -228,7 +237,12 @@ def main():
             frames = read_frames(vb, args.max_frames, name)
             if not frames:
                 raise RuntimeError('no frames decoded')
-            crops = crop_faces(frames, mtcnn, args.margin, out_size)
+            crops, nfb = crop_faces(frames, mtcnn, args.margin, out_size)
+            tot_frames += len(crops); tot_fallback += nfb
+            if args.dump_crops and n_ok < args.dump_crops:
+                for j, c in enumerate(crops[::max(1, len(crops) // 4)][:4]):
+                    c.save(os.path.join(args.out_dir, '_crops',
+                                        f'{name}_{j}.jpg'))
             feats = []
             for b in range(0, len(crops), args.batch):
                 batch = crops[b:b + args.batch]
@@ -248,8 +262,11 @@ def main():
             print(f'[{i + 1}] ok={n_ok} skip={n_skip} err={n_err} '
                   f'{r*1000:.0f}ms/clip', flush=True)
 
+    fbrate = (tot_fallback / tot_frames * 100) if tot_frames else 0
     print(f'\nDONE: ok={n_ok} skip={n_skip} err={n_err} '
           f'in {(time.time()-t0)/60:.1f} min -> {args.out_dir}')
+    print(f'no-face frames (center-crop fallback): {tot_fallback}/{tot_frames} '
+          f'({fbrate:.1f}%)  [high % => MTCNN missing faces on these frames]')
     if args.upload_repo:
         do_upload(args.out_dir, args.upload_repo, args.hf_token)
 
