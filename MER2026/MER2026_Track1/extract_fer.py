@@ -67,8 +67,11 @@ def main():
     torch.load = functools.partial(_orig_load, weights_only=False)
 
     from hsemotion.facial_emotions import HSEmotionRecognizer
+    from PIL import Image
     fer = HSEmotionRecognizer(model_name=args.model_name, device=args.device)
     torch.load = _orig_load                         # restore
+    fer.model.eval()
+    tf = fer.test_transforms                         # Resize(260)+ToTensor+Normalize
 
     os.makedirs(args.out_dir, exist_ok=True)
     names = sorted(d for d in os.listdir(args.face_root)
@@ -86,8 +89,9 @@ def main():
             print(f'[{k}] {name} no crop'); continue
         fr = np.load(crop)                                  # (T,H,W,3) uint8 RGB
         idxs = uniform_idx(len(fr), min(args.max_frames, len(fr)))
-        feats = [np.asarray(fer.extract_features(fr[i])).squeeze() for i in idxs]
-        arr = np.stack(feats).astype(np.float32)            # (n, fer_dim)
+        with torch.no_grad():                               # batch ALL frames -> 1 forward
+            batch = torch.stack([tf(Image.fromarray(fr[i]).convert('RGB')) for i in idxs]).to(args.device)
+            arr = fer.model(batch).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
         np.save(out, arr)
         done += 1; dim = arr.shape[1]
         if k < 3 or k % 1000 == 0:
