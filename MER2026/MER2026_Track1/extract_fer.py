@@ -60,8 +60,15 @@ def main():
     ap.add_argument('--limit', type=int, default=0)
     args = ap.parse_args()
 
+    # torch>=2.6 defaults weights_only=True; HSEmotion ships full pickled models
+    # and calls torch.load without the flag -> force weights_only=False (trusted).
+    import torch, functools
+    _orig_load = torch.load
+    torch.load = functools.partial(_orig_load, weights_only=False)
+
     from hsemotion.facial_emotions import HSEmotionRecognizer
     fer = HSEmotionRecognizer(model_name=args.model_name, device=args.device)
+    torch.load = _orig_load                         # restore
 
     os.makedirs(args.out_dir, exist_ok=True)
     names = sorted(d for d in os.listdir(args.face_root)
