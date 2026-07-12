@@ -1,0 +1,408 @@
+% Compile with XeLaTeX hoặc LuaLaTeX (Unicode + tiếng Việt).
+\documentclass[10pt]{article}
+\usepackage{fontspec}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{booktabs,array,float,xcolor,colortbl}
+\usepackage[hidelinks]{hyperref}
+\definecolor{cmblue}{RGB}{63,69,168}
+\setlength{\parskip}{4pt}\setlength{\parindent}{0pt}
+\title{\textbf{MER-Cross (MER2026 Track-1)\\ Tổng hợp kiến trúc: ý tưởng, cơ sở, và kết quả}}
+\author{}\date{}
+\begin{document}\maketitle
+\noindent\textbf{Bài toán.} Dự đoán cảm xúc người \emph{nghe} (listener) trong hội thoại tay đôi.
+Train = 9\,395 mẫu Individual (audio/text/video cùng người, đang nói); test = 574 mẫu
+Interlocutor (video = listener im lặng, audio/text = speaker khác). Metric = weighted-F1 (WAF)
+trên Codabench (nhiễu $\pm3$--4). Baseline tốt nhất \textbf{v3 = 65.78}~\cite{mer2026}.
+
+\medskip\noindent\textbf{Lưu ý.} Confusion matrix \& metric per-class là \emph{in-domain}
+(held-out train), do test không có nhãn (Codabench chỉ trả WAF tổng hợp). Chúng cho biết
+model nhầm lớp nào trên train; WAF test đo khả năng transfer cross-role.
+
+\section*{Bảng tổng hợp kết quả}
+\begin{table}[H]\centering\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Kiến trúc} & \textbf{WAF test} & \textbf{Ghi chú} \\ \midrule
+Pseudo-label (mix)        & 66.0 & transductive, +0.2 \\
+v3 ensemble (7-seed)      & 65.80 & giảm variance \\
+\textbf{v3 (best model)}  & \textbf{65.78} & Fix2+Fix3 \\
+v6 CM-StEW                & 65.36 & aux transfer \\
+v11 deep-sup video        & $\sim$65 & aux CE video \\
+v4/v5 fusion variants     & $\sim$64 & \\
+v2 visual-anchor          & 63--64 & \\
+v8 reliability-gate       & 63 & \\
+v7 conflict exposure      & 62--63 & \\
+TMA/BBA transductive      & 61.47 & confirmation bias \\
+FER backbone (HSEmotion)  & 59.6--61 & domain gap \\
+v9/v10 AU feature         & 60--61 & observation-shift \\
+MLLM SFT (+transcript)    & 49.84 & in-dom 0.87 \\
+MLLM video-only           & 42.8 & in-dom 0.59 \\
+MLLM zero-shot            & 42 & \\
+\bottomrule
+\end{tabular}
+\caption{WAF Codabench (test, 574 mẫu). Trần thông tin $\sim$66 bền vững mọi trục.}
+\end{table}
+
+\section*{MemoCMT baseline \quad\normalsize\textnormal{[v1]} \hfill \small WAF test: baseline}
+
+\textbf{Ý tưởng.}\ Nhánh speaker: cross-attention hai chiều audio$\leftrightarrow$text rồi nối và mean-pool thành một vector; nhánh listener: video qua Learnable Query Pooling; fusion: query = listener, key/value = speaker + residual.
+
+\textbf{Vì sao.}\ Tái lập MemoCMT làm baseline cho hội thoại dyadic: cross-attention để hai modality bổ sung nhau, listener video làm truy vấn vì đó là đối tượng cần dự đoán.
+
+\textbf{Tham khảo.}\ \cite{memocmt,vaswani2017}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{MemoCMT-v3 (best) \quad\normalsize\textnormal{[v3]} \hfill \small WAF test: \textbf{65.78}}
+
+\textbf{Ý tưởng.}\ v1 + \textbf{Fix2} (mean-pool a2t và t2a \emph{riêng} $\to$ sp\_a, sp\_t) + \textbf{Fix3} (fusion K/V = 2 token [sp\_a, sp\_t]).
+
+\textbf{Vì sao.}\ Fix2 sửa mất cân bằng khi số token audio$\neq$text bị nuốt trong mean chung; Fix3 tránh attention suy biến khi chỉ có một token K/V. Đây là mô hình đạt WAF cao nhất.
+
+\textbf{Tham khảo.}\ \cite{memocmt,vaswani2017}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!2}3 \\
+\textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 \\
+\textbf{hap} & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!63}\textbf{91} & \cellcolor{cmblue!0}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!58}\textbf{84} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}2 \\
+\textbf{wor} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!3}4 \\
+\textbf{sur} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!10}14 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!43}\textbf{62} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.780 & 0.695 & 0.735 & 2284 \\
+angry & 0.794 & 0.793 & 0.793 & 2155 \\
+happy & 0.870 & 0.907 & 0.888 & 1827 \\
+sad & 0.842 & 0.835 & 0.839 & 1658 \\
+worried & 0.635 & 0.701 & 0.667 & 1081 \\
+surprise & 0.518 & 0.621 & 0.565 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{Visual-anchored gated fusion \quad\normalsize\textnormal{[v2]} \hfill \small WAF test: 63--64}
+
+\textbf{Ý tưởng.}\ Video (BiLSTM) self-attention rồi attend sang audio \& text (query = visual); gate $g\cdot v_a+(1-g)\cdot v_t + h_v$ (residual video thô) rồi pooling.
+
+\textbf{Vì sao.}\ Ở test chỉ video (listener) là tín hiệu đáng tin và transfer được $\to$ đặt video làm trục, audio/text chỉ bổ trợ, residual giữ video khi a/t không đáng tin.
+
+\textbf{Tham khảo.}\ \cite{arevalo2017gmu}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{Full-sequence fusion (fixed / gated) \quad\normalsize\textnormal{[v4/v5]} \hfill \small WAF test: $\sim$64}
+
+\textbf{Ý tưởng.}\ Listener query attend \emph{toàn chuỗi} a2t và t2a riêng (frame-level); v4 trộn cố định $0.5/0.5$, v5 dùng gate học per-channel.
+
+\textbf{Vì sao.}\ Thử tăng độ mịn frame-level trong fusion và đảm bảo cân bằng audio/text qua softmax riêng từng modality.
+
+\textbf{Tham khảo.}\ \cite{vaswani2017}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{CM-StEW auxiliary transfer \quad\normalsize\textnormal{[v6]} \hfill \small WAF test: 65.36}
+
+\textbf{Ý tưởng.}\ Backbone = v3. Train thêm: MLP dịch listener\_feat $\to$ sp\_a/sp\_t (detach, L1) + căn chỉnh cosine listener$\leftrightarrow$speaker. Chỉ lúc train.
+
+\textbf{Vì sao.}\ Trong train (Individual) cả ba modality cùng một người, nên audio/text có thể \emph{dạy} video encoder mang thông tin cảm xúc; ở test nhánh video giàu hơn sẽ transfer.
+
+\textbf{Tham khảo.}\ \cite{hinton2015}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!50}\textbf{72} & \cellcolor{cmblue!5}8 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
+\textbf{ang} & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!55}\textbf{78} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 \\
+\textbf{hap} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!64}\textbf{91} & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!0}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!59}\textbf{84} & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!1}1 \\
+\textbf{wor} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!2}2 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!3}5 \\
+\textbf{sur} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!9}13 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!7}9 & \cellcolor{cmblue!44}\textbf{63} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.768 & 0.716 & 0.741 & 2284 \\
+angry & 0.808 & 0.780 & 0.794 & 2155 \\
+happy & 0.867 & 0.910 & 0.888 & 1827 \\
+sad & 0.849 & 0.838 & 0.843 & 1658 \\
+worried & 0.655 & 0.699 & 0.676 & 1081 \\
+surprise & 0.515 & 0.628 & 0.566 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7850}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{Nonverbal Conflict Exposure \quad\normalsize\textnormal{[v7]} \hfill \small WAF test: 62--63}
+
+\textbf{Ý tưởng.}\ Backbone = v3. Lúc train, xác suất $p$ tráo audio+text của mẫu bằng của donor \emph{khác nhãn} trong batch (giữ video + nhãn).
+
+\textbf{Vì sao.}\ Train có audio/text luôn nhất quán với nhãn; test thì thuộc speaker (có thể mâu thuẫn). Phơi bày mâu thuẫn để ép model neo vào video, không bị speaker sai vai đánh lừa.
+
+\textbf{Tham khảo.}\ \cite{ganin2016dann}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!45}\textbf{64} & \cellcolor{cmblue!9}12 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!3}4 \\
+\textbf{ang} & \cellcolor{cmblue!8}11 & \cellcolor{cmblue!48}\textbf{69} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!4}6 \\
+\textbf{hap} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!63}\textbf{90} & \cellcolor{cmblue!0}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!54}\textbf{76} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!1}2 \\
+\textbf{wor} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!9}12 & \cellcolor{cmblue!2}2 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!44}\textbf{63} & \cellcolor{cmblue!4}6 \\
+\textbf{sur} & \cellcolor{cmblue!7}9 & \cellcolor{cmblue!12}17 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!10}14 & \cellcolor{cmblue!34}\textbf{49} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.708 & 0.642 & 0.673 & 2284 \\
+angry & 0.709 & 0.691 & 0.700 & 2155 \\
+happy & 0.856 & 0.898 & 0.877 & 1827 \\
+sad & 0.809 & 0.765 & 0.786 & 1658 \\
+worried & 0.553 & 0.626 & 0.587 & 1081 \\
+surprise & 0.370 & 0.487 & 0.420 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7184}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{Reliability-Guided Complementation \quad\normalsize\textnormal{[v8]} \hfill \small WAF test: 63}
+
+\textbf{Ý tưởng.}\ Video anchor truy hồi tham chiếu speaker (query = video); head phụ video-only cho độ tin cậy $c_v$; $h_v^*=h_v+(1-c_v)\Delta$, head trên $[h_v^*,t_{ref},a_{ref}]$.
+
+\textbf{Vì sao.}\ Chỉ để speaker bổ trợ \emph{khi} video không chắc chắn; video tự tin thì nén speaker $\to$ giảm nhiễu từ modality không transfer.
+
+\textbf{Tham khảo.}\ \cite{arevalo2017gmu}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!50}\textbf{71} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!5}6 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
+\textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{78} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}5 \\
+\textbf{hap} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!63}\textbf{90} & \cellcolor{cmblue!0}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!59}\textbf{84} & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}2 \\
+\textbf{wor} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!47}\textbf{67} & \cellcolor{cmblue!4}6 \\
+\textbf{sur} & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!8}12 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!5}8 & \cellcolor{cmblue!46}\textbf{66} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.773 & 0.711 & 0.741 & 2284 \\
+angry & 0.809 & 0.781 & 0.795 & 2155 \\
+happy & 0.876 & 0.902 & 0.889 & 1827 \\
+sad & 0.839 & 0.838 & 0.838 & 1658 \\
+worried & 0.644 & 0.671 & 0.657 & 1081 \\
+surprise & 0.468 & 0.662 & 0.548 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7816}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{Deep-supervised video branch \quad\normalsize\textnormal{[v11]} \hfill \small WAF test: $\sim$65}
+
+\textbf{Ý tưởng.}\ Backbone = v3. Train thêm CE phụ chỉ trên listener\_feat (video-only head).
+
+\textbf{Vì sao.}\ In-domain audio/text mạnh nên fusion đạt loss thấp mà không cần video tốt (video ``lười''). Deep supervision ép nhánh video tự phân biệt cảm xúc $\to$ anchor mạnh hơn cho test.
+
+\textbf{Tham khảo.}\ \cite{lee2015dsn}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!2}3 \\
+\textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 \\
+\textbf{hap} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!64}\textbf{91} & \cellcolor{cmblue!0}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!58}\textbf{83} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}1 \\
+\textbf{wor} & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!3}5 \\
+\textbf{sur} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!11}16 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!43}\textbf{61} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.778 & 0.697 & 0.736 & 2284 \\
+angry & 0.776 & 0.786 & 0.781 & 2155 \\
+happy & 0.877 & 0.910 & 0.893 & 1827 \\
+sad & 0.840 & 0.830 & 0.835 & 1658 \\
+worried & 0.648 & 0.696 & 0.671 & 1081 \\
+surprise & 0.506 & 0.610 & 0.553 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7792}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{FACS Action-Unit features \quad\normalsize\textnormal{[v9/v10]} \hfill \small WAF test: 60--61}
+
+\textbf{Ý tưởng.}\ Feature video = CLIP $\oplus$ AU (py-feat). v9: hai nhánh (CLIP-enc, AU-enc) $\to$ gated embedding; v10: giữ CLIP làm anchor, au\_feat thêm làm token K/V thứ 3.
+
+\textbf{Vì sao.}\ AU (FACS) là tín hiệu biểu cảm bất biến danh tính, kỳ vọng bổ sung cho CLIP. Thực tế bị \emph{observation-shift}: speaker nói kích hoạt mouth-AU cấu âm, listener im lặng thì không $\to$ hại.
+
+\textbf{Tham khảo.}\ \cite{ekman1978facs,cheong2023pyfeat}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{Asymmetric VIB-FiLM fusion \quad\normalsize\textnormal{[v12]} \hfill \small WAF test: (đang chạy)}
+
+\textbf{Ý tưởng.}\ Video = anchor; speaker (sp\_a,sp\_t) nén qua Variational Information Bottleneck $\to$ code $z$ $\to$ sinh FiLM $(\gamma,\beta)$ điều chế listener\_feat. FiLM zero-init; VIB KL = loss train-only.
+
+\textbf{Vì sao.}\ Bất đối xứng bản thể: video là bằng chứng trực tiếp, audio/text chỉ là kích thích ngoại lai. VIB lọc bỏ đặc trưng speaker không transfer, FiLM để speaker \emph{điều chỉnh} chứ không lấn át video.
+
+\textbf{Tham khảo.}\ \cite{alemi2017,perez2018}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{FER-specialised video backbone \quad\normalsize\textnormal{[FER]} \hfill \small WAF test: 59.6--61}
+
+\textbf{Ý tưởng.}\ Thay CLIP bằng embedding từ HSEmotion (EfficientNet-B2, pretrained AffectNet-8); kiến trúc v3 giữ nguyên audio/text/fusion.
+
+\textbf{Vì sao.}\ Kỳ vọng vision chuyên biểu cảm bắt vi biểu cảm listener tốt hơn CLIP generic. Thực tế thua CLIP: HSEmotion train trên mặt posed/biểu cảm mạnh $\neq$ mặt listener hội thoại tinh tế (domain gap).
+
+\textbf{Tham khảo.}\ \cite{savchenko2022,mollahosseini2017}
+
+\begin{table}[H]\centering\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true\,$\downarrow$ / pred\,$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!47}\textbf{67} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!3}4 \\
+\textbf{ang} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!55}\textbf{79} & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!3}4 \\
+\textbf{hap} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}2 & \cellcolor{cmblue!62}\textbf{88} & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!58}\textbf{84} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!1}2 \\
+\textbf{wor} & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!48}\textbf{69} & \cellcolor{cmblue!3}4 \\
+\textbf{sur} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!9}12 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!46}\textbf{66} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (row-normalised \%, in-domain held-out). Diagonal = recall.}
+\end{table}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.783 & 0.669 & 0.722 & 2284 \\
+angry & 0.792 & 0.792 & 0.792 & 2155 \\
+happy & 0.869 & 0.885 & 0.877 & 1827 \\
+sad & 0.804 & 0.835 & 0.820 & 1658 \\
+worried & 0.633 & 0.688 & 0.659 & 1081 \\
+surprise & 0.487 & 0.659 & 0.560 & 390 \\
+\midrule
+\textbf{Weighted-F1 (in-domain)} & \multicolumn{4}{c}{\textbf{0.7713}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision / recall / F1 (in-domain held-out).}
+\end{table}
+
+\section*{Qwen2.5-VL QLoRA + verbalizer \quad\normalsize\textnormal{[MLLM]} \hfill \small WAF test: 42--50 (in-dom 0.59--0.87)}
+
+\textbf{Ý tưởng.}\ Frame mặt listener + transcript speaker $\to$ prompt vai $\to$ LoRA sinh nhãn; infer bằng log-prob first-token của 6 nhãn (verbalizer). Biến thể video-only bỏ transcript.
+
+\textbf{Vì sao.}\ Thử đưa reasoning/world-knowledge của MLLM. Thất bại: vision generic (ViT freeze) trên crop $112^2$ đọc micro-expression yếu (video-only 42.8); in-domain 0.87 nhưng test 0.50 $\to$ nút thắt là tri giác thị giác, không phải reasoning.
+
+\textbf{Tham khảo.}\ \cite{qwen25vl,dettmers2023,schick2021}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{Pseudo-label / TMA-BBA \quad\normalsize\textnormal{[Transductive]} \hfill \small WAF test: 66.0 / 61.47}
+
+\textbf{Ý tưởng.}\ Dùng 20k candidate không nhãn: (a) pseudo-label trộn vào train, retrain; (b) TMA/BBA: v3 làm bridge, re-init head, train thuần trên pseudo pool.
+
+\textbf{Vì sao.}\ Khai thác dữ liệu target không nhãn. Pseudo-mix chỉ +0.2 (talking-face vẫn lấn át); TMA/BBA $-4.3$ do bẫy thiên kiến xác nhận (distill nhãn giả cứng làm nghèo model).
+
+\textbf{Tham khảo.}\ \cite{liang2020shot,zhu2025bba}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+\section*{Post-hoc calibration ($\tau$ / MLLS) \quad\normalsize\textnormal{[Label-shift]} \hfill \small WAF test: (hậu kỳ)}
+
+\textbf{Ý tưởng.}\ Hiệu chỉnh dịch nhãn hậu kỳ: $\text{logit}-\tau\log(\text{train\_prior})$ ($\tau=2.5$); hoặc BCTS + MLLS (EM ước lượng prior target trên 20k).
+
+\textbf{Vì sao.}\ Phân phối lớp train $\neq$ test $\to$ hiệu chỉnh prior. $\tau$ giúp ổn định (+); MLLS có nguyên lý hơn nhưng bị vi phạm giả định label-shift (còn role-shift).
+
+\textbf{Tham khảo.}\ \cite{lipton2018,alexandari2020}
+
+\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+
+
+\begin{thebibliography}{99}
+\bibitem{memocmt} \emph{MemoCMT: Multimodal emotion recognition using cross-modal transformer-based feature fusion}, 2025.
+\bibitem{vaswani2017} A. Vaswani et al., \emph{Attention Is All You Need}, NeurIPS 2017.
+\bibitem{arevalo2017gmu} J. Arevalo et al., \emph{Gated Multimodal Units for Information Fusion}, ICLR Workshop 2017.
+\bibitem{hinton2015} G. Hinton, O. Vinyals, J. Dean, \emph{Distilling the Knowledge in a Neural Network}, 2015.
+\bibitem{ganin2016dann} Y. Ganin et al., \emph{Domain-Adversarial Training of Neural Networks}, JMLR 2016.
+\bibitem{lee2015dsn} C.-Y. Lee et al., \emph{Deeply-Supervised Nets}, AISTATS 2015.
+\bibitem{ekman1978facs} P. Ekman, W. Friesen, \emph{Facial Action Coding System}, 1978.
+\bibitem{cheong2023pyfeat} J. Cheong et al., \emph{Py-Feat: Python Facial Expression Analysis Toolbox}, 2023.
+\bibitem{alemi2017} A. Alemi et al., \emph{Deep Variational Information Bottleneck}, ICLR 2017.
+\bibitem{perez2018} E. Perez et al., \emph{FiLM: Visual Reasoning with a General Conditioning Layer}, AAAI 2018.
+\bibitem{savchenko2022} A. Savchenko, \emph{HSEmotion: Facial expression recognition with EfficientNet on AffectNet}, 2022.
+\bibitem{mollahosseini2017} A. Mollahosseini et al., \emph{AffectNet: A Database for Facial Expression, Valence, and Arousal}, IEEE TAC 2017.
+\bibitem{qwen25vl} Qwen Team, \emph{Qwen2.5-VL Technical Report}, 2025.
+\bibitem{dettmers2023} T. Dettmers et al., \emph{QLoRA: Efficient Finetuning of Quantized LLMs}, NeurIPS 2023.
+\bibitem{schick2021} T. Schick, H. Sch\"utze, \emph{Exploiting Cloze-Questions for Few-Shot Text Classification (PET)}, EACL 2021.
+\bibitem{liang2020shot} J. Liang et al., \emph{Do We Really Need to Access the Source Data? (SHOT)}, ICML 2020.
+\bibitem{zhu2025bba} J. Zhu et al., \emph{Bridge Then Begin Anew: Generating Target-Relevant Intermediate Model for Source-Free VER}, AAAI 2025.
+\bibitem{lipton2018} Z. Lipton et al., \emph{Detecting and Correcting for Label Shift (BBSE)}, ICML 2018.
+\bibitem{alexandari2020} A. Alexandari et al., \emph{Maximum Likelihood with Bias-Corrected Calibration (MLLS)}, ICML 2020.
+\bibitem{mer2026} \emph{MER 2026: From Discriminative Emotion Recognition to Generative Emotion Understanding}, arXiv:2604.19417.
+\end{thebibliography}
+
+\end{document}
