@@ -97,12 +97,24 @@ def read_frames(video_bytes, max_frames, name):
             pass
 
 
-def crop_faces(frames, mtcnn, margin, out_size):
+def crop_faces(frames, mtcnn, margin, out_size, detect_size=0):
     """Detect the largest face per frame, crop with margin at native res, return
-    (crops, n_fallback). Frames with no detected face -> center-square fallback."""
+    (crops, n_fallback). Frames with no detected face -> center-square fallback.
+    detect_size>0: run MTCNN on frames downscaled so their longest side == that
+    (much faster on big frames); boxes are mapped back and cropped at full res so
+    crop quality is unchanged."""
     pil = [Image.fromarray(f) for f in frames]
+    scale = 1.0
+    det = pil
+    if detect_size and pil:
+        W0, H0 = pil[0].size
+        s = detect_size / float(max(W0, H0))
+        if s < 1.0:
+            scale = s
+            det = [im.resize((max(1, int(W0 * s)), max(1, int(H0 * s))),
+                             Image.BILINEAR) for im in pil]
     try:
-        boxes, probs = mtcnn.detect(pil)
+        boxes, probs = mtcnn.detect(det)
     except Exception:
         boxes = [None] * len(pil)
     crops, n_fallback = [], 0
@@ -110,9 +122,9 @@ def crop_faces(frames, mtcnn, margin, out_size):
         W, H = img.size
         has = box is not None and len(box)
         if has:
-            # largest by area
+            # largest by area, mapped back to full-res coords
             b = max(box, key=lambda q: (q[2] - q[0]) * (q[3] - q[1]))
-            x1, y1, x2, y2 = b
+            x1, y1, x2, y2 = [c / scale for c in b]
             bw, bh = x2 - x1, y2 - y1
             mx, my = bw * margin, bh * margin
             x1, y1 = max(0, x1 - mx), max(0, y1 - my)
@@ -177,6 +189,9 @@ def main():
                     help='override CLIP input size (0 = model default)')
     ap.add_argument('--max_frames', type=int, default=64)
     ap.add_argument('--margin', type=float, default=0.35)
+    ap.add_argument('--detect_size', type=int, default=360,
+                    help='downscale longest side to this for MTCNN detection '
+                         '(crop still taken at full res); 0 = detect full res')
     ap.add_argument('--batch', type=int, default=64, help='frames/CLIP forward')
     ap.add_argument('--device', default='cuda')
     ap.add_argument('--stream', action='store_true',
@@ -237,7 +252,8 @@ def main():
             frames = read_frames(vb, args.max_frames, name)
             if not frames:
                 raise RuntimeError('no frames decoded')
-            crops, nfb = crop_faces(frames, mtcnn, args.margin, out_size)
+            crops, nfb = crop_faces(frames, mtcnn, args.margin, out_size,
+                                    args.detect_size)
             tot_frames += len(crops); tot_fallback += nfb
             if args.dump_crops and n_ok < args.dump_crops:
                 for j, c in enumerate(crops[::max(1, len(crops) // 4)][:4]):
