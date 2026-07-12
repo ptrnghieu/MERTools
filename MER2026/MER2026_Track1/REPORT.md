@@ -79,6 +79,7 @@ listener (video → LearnableQueryPooling) + fusion (Q=listener, K/V=speaker).
 | v9 | 2 nhánh video (CLIP + AU) gated embedding | 60–61 ✗ |
 | v10 | v3 + AU làm token fusion thứ 3 | 60–61 ✗ |
 | v11 | v3 + aux CE video-only (deep supervision) | ~65 ~ |
+| v12 | v3 + asymmetric VIB-FiLM fusion (video anchor, speaker→VIB→FiLM) | 64.5 ✗ |
 
 → **Ba trục nhánh video (capacity v2 / information v9,v10 / training-signal
 v6,v11) đều âm hoặc trung tính.** Bottleneck không ở kiến trúc.

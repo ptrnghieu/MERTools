@@ -278,7 +278,7 @@ info) = làm nghèo thầy; đồng thời **vứt train thật** — hoá ra tr
 
 ---
 
-## Nhóm F — Fusion bất đối xứng (v12) · VIB-FiLM
+## Nhóm F — Fusion bất đối xứng (v12) · VIB-FiLM · WAF 64.5 ✗
 
 **Chỉ đổi fusion** (encoders + speaker branch + listener pool = v3). Video =
 anchor; speaker audio/text nén qua **VIB** → sinh **FiLM (γ,β)** điều chế anchor.
