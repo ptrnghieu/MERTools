@@ -23,7 +23,13 @@ Env: pip install hsemotion timm   (torch already present)
     --out_dir   /workspace/fer_feats/hsemotion-enet_b2_8-FRA \
     --model_name enet_b2_8 --max_frames 64 --limit 20     # SMOKE first
 """
-import os, glob, argparse
+import os, sys, glob, argparse
+# repo ships a statistics.py that shadows stdlib `statistics`; when torch's
+# inductor does `import statistics` it grabs the repo file (which imports
+# torchaudio) -> spurious ModuleNotFoundError. Strip the repo dir from sys.path
+# BEFORE importing torch/torchvision/hsemotion.
+_self = os.path.dirname(os.path.abspath(__file__))
+sys.path = [p for p in sys.path if os.path.abspath(p or '.') != _self]
 import numpy as np
 
 
