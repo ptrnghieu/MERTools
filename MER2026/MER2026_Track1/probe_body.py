@@ -22,11 +22,15 @@ You must have accepted the dataset terms on that repo; pass --hf_token if gated.
   # 1) just see what raw-video assets the challenge repo ships (no download):
   python probe_body.py --list_only --hf_token $HF_TOKEN
 
-  # 2) full probe: pull a small sample, measure coverage, write montage:
+  # 2) CHEAP probe -- read ~24 clips out of the 12.4 GB zip via remote range
+  #    requests (pulls only tens of MB, NOT the whole archive):
   python probe_body.py \
-    --out_dir /workspace/body_probe \
-    --n_clips 24 --frames_per_clip 3 \
-    --hf_token $HF_TOKEN
+    --asset video_7z/video_track1_train/video_split.zip \
+    --out_dir /workspace/body_probe --n_clips 24 --hf_token $HF_TOKEN
+
+  # If partial-remote fails (xet backend / 7z), add --full to download the
+  # whole asset once (you need it anyway if #2 proceeds), then extract locally:
+  #   python probe_body.py --asset .../video_split.zip --full --hf_token $HF_TOKEN
 
 Reads the verdict off stdout; open {out_dir}/montage_*.jpg to confirm by eye.
 
@@ -72,6 +76,69 @@ def list_assets(repo, token):
     # heuristic: video-bearing zips usually have 'video' in the name and are big
     vzips = [f for f in zips if 'video' in f.lower()] or zips
     return files, sizes, vids, vzips
+
+
+def _extract_members_to(files_bytes, out_dir):
+    """files_bytes: list of (name, bytes) -> write basenames to out_dir."""
+    paths = []
+    for name, data in files_bytes:
+        dst = os.path.join(out_dir, os.path.basename(name))
+        with open(dst, 'wb') as fh:
+            fh.write(data)
+        paths.append(dst)
+    return paths
+
+
+def grab_clips_partial(repo, asset, n, out_dir, token):
+    """Read up to n video members from a REMOTE zip via range requests.
+    Pulls only the central directory + selected members (tens of MB), not the
+    whole archive. Returns list of local paths, or None if not a readable zip."""
+    from huggingface_hub import HfFileSystem
+    fs = HfFileSystem(token=token)
+    rpath = f'datasets/{repo}/{asset}'
+    f = fs.open(rpath, 'rb')                      # seekable, range-backed
+    try:
+        zf = zipfile.ZipFile(f)                   # reads central dir only
+    except zipfile.BadZipFile:
+        f.close()
+        return None                               # likely a real 7z -> fallback
+    members = [m for m in zf.namelist()
+               if m.lower().endswith(VIDEO_EXTS)][:n]
+    print(f'  remote zip: {len(zf.namelist())} entries, pulling {len(members)} '
+          f'video members via range requests ...')
+    got = [(m, zf.open(m).read()) for m in members]
+    zf.close(); f.close()
+    return _extract_members_to(got, out_dir)
+
+
+def grab_clips_full(repo, asset, n, out_dir, token):
+    """Download the whole asset, then extract up to n video members.
+    Handles both .zip and 7z (via py7zr or the `7z` CLI)."""
+    from huggingface_hub import hf_hub_download
+    lp = hf_hub_download(repo, asset, repo_type='dataset',
+                         local_dir=out_dir, token=token)
+    if zipfile.is_zipfile(lp):
+        with zipfile.ZipFile(lp) as z:
+            members = [m for m in z.namelist()
+                       if m.lower().endswith(VIDEO_EXTS)][:n]
+            return _extract_members_to([(m, z.read(m)) for m in members], out_dir)
+    # not a zip -> try 7z
+    try:
+        import py7zr
+        with py7zr.SevenZipFile(lp, 'r') as z:
+            names = [x for x in z.getnames() if x.lower().endswith(VIDEO_EXTS)][:n]
+            data = z.read(names)                  # {name: BytesIO}
+            return _extract_members_to(
+                [(k, v.read()) for k, v in data.items()], out_dir)
+    except Exception as e:
+        print(f'  py7zr failed ({e}); trying `7z` CLI extract to {out_dir} ...')
+        import subprocess
+        subprocess.run(['7z', 'x', '-y', f'-o{out_dir}', lp], check=True)
+        vids = []
+        for ext in VIDEO_EXTS:
+            vids += glob.glob(os.path.join(out_dir, '**', '*' + ext),
+                              recursive=True)
+        return sorted(vids)[:n]
 
 
 def sample_video_frames(path, k):
@@ -133,6 +200,14 @@ def main():
     ap.add_argument('--frames_per_clip', type=int, default=3)
     ap.add_argument('--hf_token', default=os.environ.get('HF_TOKEN', '') or None)
     ap.add_argument('--list_only', action='store_true')
+    ap.add_argument('--asset', default='',
+                    help='exact repo path of the video archive (e.g. '
+                         'video_7z/video_track1_train/video_split.zip). '
+                         'When set, reads a few clips from it via range '
+                         'requests instead of auto-picking.')
+    ap.add_argument('--full', action='store_true',
+                    help='download the whole asset instead of partial-remote '
+                         '(use if range requests fail / asset is 7z)')
     ap.add_argument('--max_zip_mb', type=int, default=1500,
                     help='skip video zips larger than this when auto-picking')
     args = ap.parse_args()
@@ -161,8 +236,25 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     local_videos = []
 
+    # Targeted asset (e.g. the 12.4 GB train zip): read a few clips cheaply.
+    if args.asset:
+        if not args.full:
+            print(f'\nReading {args.n_clips} clips from {args.asset} via remote '
+                  f'range requests (no full download) ...')
+            local_videos = grab_clips_partial(args.repo, args.asset,
+                                               args.n_clips, args.out_dir,
+                                               args.hf_token) or []
+            if not local_videos:
+                print('  partial-remote read unavailable -> falling back to '
+                      'full download.')
+        if not local_videos:
+            print(f'\nDownloading full asset {args.asset} '
+                  f'({_human(sizes.get(args.asset, 0))}) ...')
+            local_videos = grab_clips_full(args.repo, args.asset,
+                                            args.n_clips, args.out_dir,
+                                            args.hf_token)
     # Prefer loose video files (cheap: grab n_clips of them).
-    if vids:
+    elif vids:
         pick = vids[:args.n_clips]
         print(f'\nDownloading {len(pick)} loose video files ...')
         for f in pick:
