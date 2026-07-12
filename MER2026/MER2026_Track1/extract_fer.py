@@ -101,7 +101,7 @@ def main():
         sel = np.ascontiguousarray(fr[idxs])                # (n,H,W,3)
         with torch.no_grad():                               # GPU resize+norm, 1 batch forward
             t = torch.from_numpy(sel).to(args.device).permute(0, 3, 1, 2).float().div_(255.)
-            t = F.interpolate(t, size=(size, size), mode='bilinear', align_corners=False, antialias=True)
+            t = F.interpolate(t, size=(size, size), mode='bilinear', align_corners=False)
             t = (t - mean) / std
             arr = fer.model(t).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
         np.save(out, arr)
