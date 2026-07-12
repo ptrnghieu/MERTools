@@ -23,7 +23,7 @@ Env: pip install hsemotion timm   (torch already present)
     --out_dir   /workspace/fer_feats/hsemotion-enet_b2_8-FRA \
     --model_name enet_b2_8 --max_frames 64 --limit 20     # SMOKE first
 """
-import os, sys, glob, argparse
+import os, sys, glob, argparse, time
 # repo ships a statistics.py that shadows stdlib `statistics`; when torch's
 # inductor does `import statistics` it grabs the repo file (which imports
 # torchaudio) -> spurious ModuleNotFoundError. Strip the repo dir from sys.path
@@ -90,6 +90,7 @@ def main():
         names = names[:args.limit]
 
     done, skip, dim = 0, 0, None
+    t_load = t_gpu = 0.0
     for k, name in enumerate(names):
         out = os.path.join(args.out_dir, name + '.npy')
         if os.path.exists(out):
@@ -97,19 +98,28 @@ def main():
         crop = find_crop(args.face_root, name)
         if crop is None:
             print(f'[{k}] {name} no crop'); continue
+        _t = time.time()
         fr = np.load(crop)                                  # (T,H,W,3) uint8 RGB
         idxs = uniform_idx(len(fr), min(args.max_frames, len(fr)))
         sel = np.ascontiguousarray(fr[idxs])                # (n,H,W,3)
+        t_load += time.time() - _t
+        _t = time.time()
         with torch.no_grad():                               # GPU resize+norm, 1 batch forward
             t = torch.from_numpy(sel).to(args.device).permute(0, 3, 1, 2).float().div_(255.)
             t = F.interpolate(t, size=(size, size), mode='bilinear', align_corners=False)
             t = (t - mean) / std
             arr = fer.model(t).float().cpu().numpy().astype(np.float32)   # (n, fer_dim)
+        if args.device.startswith('cuda'):
+            torch.cuda.synchronize()
+        t_gpu += time.time() - _t
         np.save(out, arr)
         done += 1; dim = arr.shape[1]
         if k < 3 or k % 200 == 0:
             print(f'[{k}/{len(names)}] {name} -> {arr.shape}')
     print(f'\nDONE: {done} extracted, {skip} skipped -> {args.out_dir}  (fer_dim={dim})')
+    if done:
+        print(f'timing: load={t_load:.1f}s  gpu={t_gpu:.1f}s  ({t_load/done*1000:.0f}ms + '
+              f'{t_gpu/done*1000:.0f}ms per sample)')
 
 
 if __name__ == '__main__':
