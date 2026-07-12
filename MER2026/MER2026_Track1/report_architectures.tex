@@ -50,6 +50,7 @@ v3 ensemble (7-seed) & 65.80 & giảm variance \\
 v6 CM-StEW & 65.36 & aux transfer \\
 v11 deep-sup video & $\sim$65 & aux CE \\
 v4/v5 fusion var. & $\sim$64 & \\
+v12 VIB-FiLM & 64.5 & fusion axis cạn \\
 v2 visual-anchor & 63--64 & \\
 v8 reliability-gate & 63 & \\
 v7 conflict expose & 62--63 & \\
@@ -556,7 +557,7 @@ surprise & 0.506 & 0.610 & 0.553 & 390 \\
 \emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
 
 \clearpage
-\section*{Asymmetric VIB-FiLM fusion \quad\normalsize\textnormal{[v12]} \hfill \small WAF: (đang chạy)}
+\section*{Asymmetric VIB-FiLM fusion \quad\normalsize\textnormal{[v12]} \hfill \small WAF: 64.5}
 
 \begin{figure}[H]\centering
 \begin{tikzpicture}
@@ -592,7 +593,39 @@ surprise & 0.506 & 0.610 & 0.553 & 390 \\
 
 \textbf{Tham khảo.}\ \cite{alemi2017,perez2018}
 
-\emph{(Không có confusion matrix in-domain: cv npz không còn / pipeline riêng / đang chạy.)}
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{true$\downarrow$/pred$\rightarrow$} & \textbf{neu} & \textbf{ang} & \textbf{hap} & \textbf{sad} & \textbf{wor} & \textbf{sur} \\
+\midrule
+\textbf{neu} & \cellcolor{cmblue!49}\textbf{70} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!5}6 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!1}2 \\
+\textbf{ang} & \cellcolor{cmblue!5}7 & \cellcolor{cmblue!57}\textbf{81} & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!2}3 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!2}2 \\
+\textbf{hap} & \cellcolor{cmblue!4}6 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!63}\textbf{90} & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!1}1 \\
+\textbf{sad} & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}1 & \cellcolor{cmblue!59}\textbf{84} & \cellcolor{cmblue!3}4 & \cellcolor{cmblue!1}1 \\
+\textbf{wor} & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!6}9 & \cellcolor{cmblue!1}2 & \cellcolor{cmblue!6}8 & \cellcolor{cmblue!48}\textbf{68} & \cellcolor{cmblue!2}3 \\
+\textbf{sur} & \cellcolor{cmblue!5}8 & \cellcolor{cmblue!12}18 & \cellcolor{cmblue!4}5 & \cellcolor{cmblue!3}5 & \cellcolor{cmblue!7}10 & \cellcolor{cmblue!39}\textbf{55} \\
+\bottomrule
+\end{tabular}
+\caption{Confusion matrix (\% theo hàng, in-domain). Đường chéo = recall.}
+\end{table}
+
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Class} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{N} \\
+\midrule
+neutral & 0.769 & 0.700 & 0.733 & 2284 \\
+angry & 0.777 & 0.814 & 0.795 & 2155 \\
+happy & 0.875 & 0.897 & 0.886 & 1827 \\
+sad & 0.819 & 0.839 & 0.829 & 1658 \\
+worried & 0.660 & 0.682 & 0.671 & 1081 \\
+surprise & 0.578 & 0.551 & 0.564 & 390 \\
+\midrule
+\textbf{WAF (in-domain)} & \multicolumn{4}{c}{\textbf{0.7797}} \\
+\bottomrule
+\end{tabular}
+\caption{Per-class precision/recall/F1 (in-domain).}
+\end{table}
 
 \clearpage
 \section*{FER-specialised video backbone \quad\normalsize\textnormal{[FER]} \hfill \small WAF: 59.6--61}
