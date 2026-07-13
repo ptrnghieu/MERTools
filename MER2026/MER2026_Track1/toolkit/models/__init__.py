@@ -36,6 +36,7 @@ from .memocmt_v9 import MemoCMTV9
 from .memocmt_v11 import MemoCMTV11
 from .memocmt_v10 import MemoCMTV10
 from .memocmt_v12 import MemoCMTV12
+from .memocmt_v13 import MemoCMTV13
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -124,6 +125,11 @@ class get_models(nn.Module):
             # v3 + asymmetric VIB-FiLM fusion: video anchor modulated by a
             # VIB-compressed speaker (audio/text) context (not symmetric mixing)
             'memocmt_v12': MemoCMTV12,
+
+            # v3 + Transformer Encoder + CLS token for listener (video) branch
+            # replaces LSTMSeqEncoder + LearnableQueryPooling with
+            # Linear proj → CLS → SinusoidalPE → TF Encoder → CLS output
+            'memocmt_v13': MemoCMTV13,
 
         }
         self.model = MODEL_MAP[args.model](args)
