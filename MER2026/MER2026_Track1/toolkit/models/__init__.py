@@ -42,6 +42,7 @@ from .memocmt_v15 import MemoCMTV15
 from .memocmt_v16 import MemoCMTV16
 from .memocmt_v17 import MemoCMTV17
 from .memocmt_v18 import MemoCMTV18
+from .memocmt_v19 import MemoCMTV19
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -155,6 +156,11 @@ class get_models(nn.Module):
             # (default 2), fused then flattened -> N*H classifier input.
             # use_pe toggles PE (combine with Bag-of-Frames when False)
             'memocmt_v18': MemoCMTV18,
+
+            # v13 + Learnable Positional Embedding + Multi-CLS tokens (keep PE):
+            # fixed sinusoidal -> learnable PE table, N CLS tokens each learning
+            # a different temporal aspect, flattened -> N*H classifier input
+            'memocmt_v19': MemoCMTV19,
 
         }
         self.model = MODEL_MAP[args.model](args)
