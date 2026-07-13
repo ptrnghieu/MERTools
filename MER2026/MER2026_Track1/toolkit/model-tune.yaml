@@ -148,3 +148,88 @@ memocmt_mmin:
   grad_clip: [1.0, -1.0]
   lr: [1e-3, 1e-4]
   lambda_forward: [0.5, 1.0, 2.0]
+
+memocmt_v1:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_mmin_hybrid:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0, 1.0]
+  lr: [1e-3, 1e-4]
+  lambda_forward: [0.5, 1.0, 2.0]
+
+memocmt_v2:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v3:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v4:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v5:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v6:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v7:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v8:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v9:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v10:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v11:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+memocmt_v12:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+
+grasp_sequence_fusion:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]

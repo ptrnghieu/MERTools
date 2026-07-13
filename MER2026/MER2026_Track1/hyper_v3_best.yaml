@@ -1,0 +1,5 @@
+memocmt_v3:
+  hidden_dim: [256]
+  dropout: [0.2]
+  grad_clip: [-1.0]
+  lr: [1e-4]
