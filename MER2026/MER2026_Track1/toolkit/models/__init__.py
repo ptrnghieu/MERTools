@@ -37,6 +37,7 @@ from .memocmt_v11 import MemoCMTV11
 from .memocmt_v10 import MemoCMTV10
 from .memocmt_v12 import MemoCMTV12
 from .memocmt_v13 import MemoCMTV13
+from .memocmt_v14 import MemoCMTV14
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -127,9 +128,11 @@ class get_models(nn.Module):
             'memocmt_v12': MemoCMTV12,
 
             # v3 + Transformer Encoder + CLS token for listener (video) branch
-            # replaces LSTMSeqEncoder + LearnableQueryPooling with
-            # Linear proj → CLS → SinusoidalPE → TF Encoder → CLS output
             'memocmt_v13': MemoCMTV13,
+
+            # v13 + Temporal Cross-Attention fusion: keep full speaker seqs,
+            # Q=video_frames, K/V=concat(F_a,F_t), avg-pool + residual CLS
+            'memocmt_v14': MemoCMTV14,
 
         }
         self.model = MODEL_MAP[args.model](args)
