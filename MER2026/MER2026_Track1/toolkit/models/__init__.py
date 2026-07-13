@@ -38,6 +38,7 @@ from .memocmt_v10 import MemoCMTV10
 from .memocmt_v12 import MemoCMTV12
 from .memocmt_v13 import MemoCMTV13
 from .memocmt_v14 import MemoCMTV14
+from .memocmt_v15 import MemoCMTV15
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -133,6 +134,11 @@ class get_models(nn.Module):
             # v13 + Temporal Cross-Attention fusion: keep full speaker seqs,
             # Q=video_frames, K/V=concat(F_a,F_t), avg-pool + residual CLS
             'memocmt_v14': MemoCMTV14,
+
+            # Multimodal Bottleneck Tokens: N learnable tokens mediate all
+            # cross-modal interaction (no direct modality-to-modality attention)
+            # Step1: bn queries speaker(a+t), Step2: bn queries listener video
+            'memocmt_v15': MemoCMTV15,
 
         }
         self.model = MODEL_MAP[args.model](args)
