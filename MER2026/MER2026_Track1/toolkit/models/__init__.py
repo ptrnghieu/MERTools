@@ -39,6 +39,7 @@ from .memocmt_v12 import MemoCMTV12
 from .memocmt_v13 import MemoCMTV13
 from .memocmt_v14 import MemoCMTV14
 from .memocmt_v15 import MemoCMTV15
+from .memocmt_v16 import MemoCMTV16
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -139,6 +140,10 @@ class get_models(nn.Module):
             # cross-modal interaction (no direct modality-to-modality attention)
             # Step1: bn queries speaker(a+t), Step2: bn queries listener video
             'memocmt_v15': MemoCMTV15,
+
+            # MBT v2: flatten N tokens -> (B, N*H) + LayerNorm before classifier
+            # hidden_dim=256, n_bottleneck=16 -> 4096-dim pre-classifier space
+            'memocmt_v16': MemoCMTV16,
 
         }
         self.model = MODEL_MAP[args.model](args)
