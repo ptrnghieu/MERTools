@@ -43,6 +43,7 @@ from .memocmt_v16 import MemoCMTV16
 from .memocmt_v17 import MemoCMTV17
 from .memocmt_v18 import MemoCMTV18
 from .memocmt_v19 import MemoCMTV19
+from .memocmt_v20 import MemoCMTV20
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -161,6 +162,11 @@ class get_models(nn.Module):
             # fixed sinusoidal -> learnable PE table, N CLS tokens each learning
             # a different temporal aspect, flattened -> N*H classifier input
             'memocmt_v19': MemoCMTV19,
+
+            # v13 + RoPE for the video branch: nn.TransformerEncoder + sinusoidal
+            # -> custom RoPEAttentionLayer stack (relative position, no absolute
+            # PE), robust to train/test video-length shift
+            'memocmt_v20': MemoCMTV20,
 
         }
         self.model = MODEL_MAP[args.model](args)
