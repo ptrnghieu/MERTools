@@ -52,6 +52,6 @@ class Attention(nn.Module):
         features  = fused_feat.squeeze(axis=2) # [32, 128] => 解决batch=1报错的问题
         emos_out  = self.fc_out_1(features)
         vals_out  = self.fc_out_2(features)
-        interloss = torch.tensor(0).cuda()
+        interloss = torch.tensor(0.0).cuda()
 
         return features, emos_out, vals_out, interloss
