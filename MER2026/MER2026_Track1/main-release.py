@@ -129,6 +129,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_class_weight', action='store_true', default=False, help='use inverse-frequency class weights in CE loss')
     parser.add_argument('--use_lr_scheduler', action='store_true', default=False, help='use CosineAnnealingLR scheduler')
     parser.add_argument('--label_smoothing', type=float, default=0.0, help='label smoothing factor (0=disabled)')
+    parser.add_argument('--use_focal', action='store_true', default=False, help='use focal loss instead of CE (combine with --use_class_weight for alpha)')
+    parser.add_argument('--focal_gamma', type=float, default=2.0, help='focal loss focusing parameter gamma')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -242,11 +244,17 @@ if __name__ == '__main__':
         if _test_video_feats is not None:
             _inner_model.model.test_video_feats = _test_video_feats  # CPU tensor, moved to GPU per batch
         reg_loss = MSELoss().cuda()
+        _w = None
         if args.use_class_weight:
             _labels = np.concatenate([data[1].numpy() for data in train_loader])
             _counts = np.bincount(_labels.astype(int), minlength=args.output_dim1).astype(float)
             _counts = np.where(_counts == 0, 1, _counts)
             _w = torch.tensor(len(_labels) / (args.output_dim1 * _counts), dtype=torch.float).cuda()
+        if args.use_focal:
+            cls_loss = FocalLoss(gamma=args.focal_gamma, weight=_w).cuda()
+            print(f'loss: FocalLoss(gamma={args.focal_gamma}, '
+                  f'class_weight={"on" if _w is not None else "off"})')
+        elif args.use_class_weight:
             cls_loss = CELoss(weight=_w).cuda()
         elif args.label_smoothing > 0:
             cls_loss = LabelSmoothingCELoss(smoothing=args.label_smoothing).cuda()

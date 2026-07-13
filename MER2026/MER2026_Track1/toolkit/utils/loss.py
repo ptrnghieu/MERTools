@@ -16,6 +16,32 @@ class CELoss(nn.Module):
         return loss
 
 
+class FocalLoss(nn.Module):
+    """Multi-class focal loss (Lin et al. 2017):
+        FL = -alpha_t * (1 - p_t)^gamma * log(p_t)
+
+    Down-weights easy, well-classified examples so training focuses on hard /
+    rare cases -- helps the under-predicted minority classes (e.g. surprise,
+    worried) in MER-Cross. gamma=0 reduces to (weighted) cross-entropy.
+    weight: optional per-class alpha tensor (idx order), e.g. inverse-frequency.
+    Normalized as sum/len(pred) to match CELoss scale.
+    """
+    def __init__(self, gamma=2.0, weight=None):
+        super().__init__()
+        self.gamma = gamma
+        self.weight = weight              # per-class alpha tensor or None
+
+    def forward(self, pred, target):
+        target = target.long()                                   # (N,)
+        logp = F.log_softmax(pred, dim=1)                        # (N, C)
+        logpt = logp.gather(1, target.unsqueeze(1)).squeeze(1)   # (N,)
+        pt = logpt.exp()
+        focal = (1 - pt) ** self.gamma * (-logpt)                # (N,)
+        if self.weight is not None:
+            focal = focal * self.weight.gather(0, target)
+        return focal.sum() / len(pred)
+
+
 class LabelSmoothingCELoss(nn.Module):
 
     def __init__(self, smoothing=0.1):
