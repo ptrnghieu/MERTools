@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from toolkit.utils.loss import *
+from toolkit.utils.sam import SAM
 from toolkit.utils.metric import *
 from toolkit.utils.functions import *
 from toolkit.models import get_models
@@ -58,11 +59,27 @@ def train_or_eval_model(args, model, reg_loss, cls_loss, dataloader, epoch, opti
         
         # optimize params
         if train:
-            loss.backward()
             _inner = model.module if hasattr(model, 'module') else model
-            if _inner.model.grad_clip != -1:
-                torch.nn.utils.clip_grad_value_([param for param in model.parameters() if param.requires_grad], _inner.model.grad_clip)
-            optimizer.step()
+            def _clip_grads():
+                if _inner.model.grad_clip != -1:
+                    torch.nn.utils.clip_grad_value_([p for p in model.parameters() if p.requires_grad], _inner.model.grad_clip)
+
+            loss.backward()
+            _clip_grads()
+            if getattr(args, 'use_sam', False):
+                optimizer.first_step(zero_grad=True)      # ascend to w + e(w)
+                # recompute loss at the perturbed weights, then descend
+                f2, emos_out2, vals_out2, interloss2 = model(batch)
+                loss2 = interloss2.mean()
+                if args.output_dim1 != 0:
+                    loss2 = loss2 + cls_loss(emos_out2, emos)
+                if args.output_dim2 != 0:
+                    loss2 = loss2 + reg_loss(vals_out2, vals)
+                loss2.backward()
+                _clip_grads()
+                optimizer.second_step(zero_grad=True)     # restore w, base step
+            else:
+                optimizer.step()
         
         # print
         if (iter+1) % args.print_iters == 0:
@@ -131,6 +148,9 @@ if __name__ == '__main__':
     parser.add_argument('--label_smoothing', type=float, default=0.0, help='label smoothing factor (0=disabled)')
     parser.add_argument('--use_focal', action='store_true', default=False, help='use focal loss instead of CE (combine with --use_class_weight for alpha)')
     parser.add_argument('--focal_gamma', type=float, default=2.0, help='focal loss focusing parameter gamma')
+    parser.add_argument('--use_sam', action='store_true', default=False, help='use Sharpness-Aware Minimization (wraps the base optimizer)')
+    parser.add_argument('--sam_rho', type=float, default=0.05, help='SAM neighborhood size rho (ASAM: try 0.5-2.0)')
+    parser.add_argument('--sam_adaptive', action='store_true', default=False, help='use ASAM (scale-invariant perturbation)')
     parser.add_argument('--print_iters', type=int, default=1e8, help='print per-iteartion')
     parser.add_argument('--gpu', default='0', type=str, help='GPU ids to use, e.g. 0 or 0,1,2,3')
     parser.add_argument('--traverse_test', action='store_true', default=False,
@@ -263,8 +283,16 @@ if __name__ == '__main__':
 
         if args.lr_adjust == 'case1':
             opt_cls = optim.AdamW if args.optimizer == 'adamw' else optim.Adam
-            optimizer = opt_cls(model.parameters(), lr=args.lr, weight_decay=args.l2)
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01) if args.use_lr_scheduler else None
+            if args.use_sam:
+                optimizer = SAM(model.parameters(), opt_cls, rho=args.sam_rho,
+                                adaptive=args.sam_adaptive, lr=args.lr, weight_decay=args.l2)
+                sched_target = optimizer.base_optimizer
+                print(f'optimizer: SAM(rho={args.sam_rho}, adaptive={args.sam_adaptive}) '
+                      f'over {args.optimizer}')
+            else:
+                optimizer = opt_cls(model.parameters(), lr=args.lr, weight_decay=args.l2)
+                sched_target = optimizer
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(sched_target, T_max=args.epochs, eta_min=args.lr * 0.01) if args.use_lr_scheduler else None
         elif args.lr_adjust == 'case2':
             scheduler = None
             assert args.model == 'e2e_model', 'lr_adjust=case2 only support for e2e_model'
