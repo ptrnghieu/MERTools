@@ -216,6 +216,11 @@ def main():
                     help='read clips from the remote zip via range requests')
     ap.add_argument('--dl_dir', default='/workspace/_zip_dl')
     ap.add_argument('--limit', type=int, default=0, help='smoke: first N clips')
+    ap.add_argument('--shard_id', type=int, default=0,
+                    help='this worker processes members where idx %% shard_num '
+                         '== shard_id (parallelize N workers over the same asset)')
+    ap.add_argument('--shard_num', type=int, default=1,
+                    help='total number of parallel workers')
     ap.add_argument('--hf_token', default=os.environ.get('HF_TOKEN') or None)
     ap.add_argument('--upload_repo', default='')
     args = ap.parse_args()
@@ -244,6 +249,8 @@ def main():
     for i, (name, vb) in enumerate(iter_members(args)):
         if args.limit and i >= args.limit:
             break
+        if args.shard_num > 1 and (i % args.shard_num) != args.shard_id:
+            continue
         if name in done:
             n_skip += 1
             continue
