@@ -278,3 +278,14 @@ memocmt_v17:
   speaker_drop_p: [0.0]
   tf_layers: [2]
   tf_heads: [4]
+
+memocmt_v18:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+  speaker_drop_p: [0.0]
+  n_cls: [2, 4]
+  use_pe: [true]
+  tf_layers: [2]
+  tf_heads: [4]

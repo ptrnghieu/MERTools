@@ -41,6 +41,7 @@ from .memocmt_v14 import MemoCMTV14
 from .memocmt_v15 import MemoCMTV15
 from .memocmt_v16 import MemoCMTV16
 from .memocmt_v17 import MemoCMTV17
+from .memocmt_v18 import MemoCMTV18
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -149,6 +150,11 @@ class get_models(nn.Module):
             # v13 + Bag-of-Frames: remove PE from video transformer so CLS
             # accumulates expression frequency/intensity, not temporal order
             'memocmt_v17': MemoCMTV17,
+
+            # v13 + Multi-CLS: N learnable CLS tokens for the video branch
+            # (default 2), fused then flattened -> N*H classifier input.
+            # use_pe toggles PE (combine with Bag-of-Frames when False)
+            'memocmt_v18': MemoCMTV18,
 
         }
         self.model = MODEL_MAP[args.model](args)
