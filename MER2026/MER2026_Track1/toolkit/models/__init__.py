@@ -40,6 +40,7 @@ from .memocmt_v13 import MemoCMTV13
 from .memocmt_v14 import MemoCMTV14
 from .memocmt_v15 import MemoCMTV15
 from .memocmt_v16 import MemoCMTV16
+from .memocmt_v17 import MemoCMTV17
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -144,6 +145,10 @@ class get_models(nn.Module):
             # MBT v2: flatten N tokens -> (B, N*H) + LayerNorm before classifier
             # hidden_dim=256, n_bottleneck=16 -> 4096-dim pre-classifier space
             'memocmt_v16': MemoCMTV16,
+
+            # v13 + Bag-of-Frames: remove PE from video transformer so CLS
+            # accumulates expression frequency/intensity, not temporal order
+            'memocmt_v17': MemoCMTV17,
 
         }
         self.model = MODEL_MAP[args.model](args)
