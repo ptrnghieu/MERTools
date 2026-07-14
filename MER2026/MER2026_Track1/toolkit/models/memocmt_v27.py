@@ -81,6 +81,7 @@ class MemoCMTV27(nn.Module):
         self.grad_clip      = args.grad_clip
         self.feat_type      = getattr(args, 'feat_type',      'utt')
         self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.0)
+        self.kv_mode        = getattr(args, 'kv_mode',        'quad')  # 'quad' | 'triple'
         tf_layers           = getattr(args, 'tf_layers',      2)
         tf_heads            = getattr(args, 'tf_heads',       max(4, hidden_dim // 32))
 
@@ -147,9 +148,14 @@ class MemoCMTV27(nn.Module):
             sp_a_mean = torch.zeros_like(sp_a_mean); sp_a_max = torch.zeros_like(sp_a_max)
             sp_t_mean = torch.zeros_like(sp_t_mean); sp_t_max = torch.zeros_like(sp_t_max)
 
-        # Fusion: listener queries 4 speaker tokens (MHA mechanism unchanged)
+        # Fusion: listener queries speaker tokens (MHA mechanism unchanged).
+        # 'triple' drops sp_t_max (== sp_t_mean when text is 1 token) to avoid
+        # duplicate-key attention dilution; 'quad' keeps all four.
         q  = listener_feat.unsqueeze(1)                                   # (B, 1, H)
-        kv = torch.stack([sp_a_mean, sp_a_max, sp_t_mean, sp_t_max], dim=1)  # (B, 4, H)
+        if self.kv_mode == 'triple':
+            kv = torch.stack([sp_a_mean, sp_a_max, sp_t_mean], dim=1)         # (B, 3, H)
+        else:
+            kv = torch.stack([sp_a_mean, sp_a_max, sp_t_mean, sp_t_max], dim=1)  # (B, 4, H)
         attn_out, _ = self.cross_attn_fusion(query=q, key=kv, value=kv)
         features = self.fuse_drop(self.norm_fusion(attn_out.squeeze(1) + listener_feat))
 
