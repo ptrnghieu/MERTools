@@ -44,6 +44,7 @@ from .memocmt_v17 import MemoCMTV17
 from .memocmt_v18 import MemoCMTV18
 from .memocmt_v19 import MemoCMTV19
 from .memocmt_v20 import MemoCMTV20
+from .memocmt_v21 import MemoCMTV21
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -167,6 +168,10 @@ class get_models(nn.Module):
             # -> custom RoPEAttentionLayer stack (relative position, no absolute
             # PE), robust to train/test video-length shift
             'memocmt_v20': MemoCMTV20,
+
+            # v13 + attention-pooling for speaker (learnable query) instead of
+            # mean-pool: focuses on salient speaker frames, output stays static
+            'memocmt_v21': MemoCMTV21,
 
         }
         self.model = MODEL_MAP[args.model](args)
