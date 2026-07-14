@@ -49,6 +49,7 @@ from .memocmt_v22 import MemoCMTV22
 from .memocmt_v23 import MemoCMTV23
 from .memocmt_v24 import MemoCMTV24
 from .memocmt_v25 import MemoCMTV25
+from .memocmt_v26 import MemoCMTV26
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -192,6 +193,10 @@ class get_models(nn.Module):
             # v13 with speaker LSTM -> per-token MLP projection (keeps the
             # pretrained backbone's clean context; fewer params, less overfit)
             'memocmt_v25': MemoCMTV25,
+
+            # v13 + Delta video features: subtract consecutive frames to
+            # suppress static identity (attacks the identity/cross-role shortcut)
+            'memocmt_v26': MemoCMTV26,
 
         }
         self.model = MODEL_MAP[args.model](args)

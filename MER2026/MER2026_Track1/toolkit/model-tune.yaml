@@ -355,3 +355,13 @@ memocmt_v25:
   speaker_drop_p: [0.0]
   tf_layers: [2]
   tf_heads: [4]
+
+memocmt_v26:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+  speaker_drop_p: [0.0]
+  delta_mode: [only, concat]
+  tf_layers: [2]
+  tf_heads: [4]

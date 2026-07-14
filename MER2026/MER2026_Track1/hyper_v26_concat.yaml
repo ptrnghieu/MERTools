@@ -1,0 +1,9 @@
+memocmt_v26:
+  hidden_dim: 128
+  dropout: 0.3
+  grad_clip: 1.0
+  lr: 0.0001
+  speaker_drop_p: 0.0
+  delta_mode: concat
+  tf_layers: 2
+  tf_heads: 4
