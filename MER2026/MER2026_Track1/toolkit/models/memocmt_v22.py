@@ -1,0 +1,187 @@
+import math
+import torch
+import torch.nn as nn
+from .modules.encoder import MLPEncoder
+
+
+class LSTMSeqEncoder(nn.Module):
+    def __init__(self, in_size, hidden_size, dropout, num_layers=1):
+        super().__init__()
+        self.input_drop = nn.Dropout(dropout)
+        self.rnn = nn.LSTM(in_size, hidden_size, num_layers=num_layers,
+                           batch_first=True, bidirectional=False)
+        self.output_drop = nn.Dropout(dropout)
+
+    def forward(self, x):
+        out, _ = self.rnn(self.input_drop(x))
+        return self.output_drop(out)
+
+
+class SinusoidalPE(nn.Module):
+    def __init__(self, d_model, max_len=512):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        pos = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
+        self.register_buffer('pe', pe.unsqueeze(0))
+
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1), :]
+
+
+class CLSTransformerEncoder(nn.Module):
+    """Same video encoder as v13."""
+    def __init__(self, in_dim, hidden_dim, num_heads, num_layers, dropout):
+        super().__init__()
+        self.proj  = nn.Linear(in_dim, hidden_dim)
+        self.cls   = nn.Parameter(torch.zeros(1, 1, hidden_dim))
+        nn.init.normal_(self.cls, std=0.02)
+        self.pe    = SinusoidalPE(hidden_dim)
+        enc_layer  = nn.TransformerEncoderLayer(
+            d_model=hidden_dim, nhead=num_heads, dim_feedforward=hidden_dim * 4,
+            dropout=dropout, batch_first=True, norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.drop_out = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x = self.proj(x)
+        cls = self.cls.expand(x.size(0), -1, -1)
+        x = torch.cat([cls, x], dim=1)
+        x = self.pe(x)
+        x = self.encoder(x)
+        return self.drop_out(x[:, 0, :])
+
+
+class MemoCMTV22(nn.Module):
+    """
+    v13 + listener body-language branch (pose + optical flow).
+
+    The extra modality (--body_feature, shape (T, 43): pose[:27] + flow[27:])
+    complements the face-CLIP video: it captures nod/shake/shrug/hand gestures
+    the cropped face cannot show. Pose (static posture) and flow (motion) are
+    encoded by separate LSTMs, mean-pooled, merged, then admitted into the
+    listener representation through a learned gate (so the model can ignore it
+    if unhelpful -> non-disruptive; reduces to v13 when gate -> 0).
+
+    Speaker branch and fusion are identical to v13. Video (face) branch too.
+
+    Requires --body_feature; if the batch lacks 'bodys', the body term is 0.
+    """
+
+    POSE_DIM = 27   # 9 upper-body keypoints x (x, y, visibility)
+    FLOW_DIM = 16   # global optical-flow descriptor
+
+    def __init__(self, args):
+        super().__init__()
+        audio_dim   = args.audio_dim
+        text_dim    = args.text_dim
+        video_dim   = args.video_dim
+        output_dim1 = args.output_dim1
+        output_dim2 = args.output_dim2
+        dropout     = args.dropout
+        hidden_dim  = args.hidden_dim
+        self.grad_clip      = args.grad_clip
+        self.feat_type      = getattr(args, 'feat_type',      'utt')
+        self.speaker_drop_p = getattr(args, 'speaker_drop_p', 0.0)
+        tf_layers           = getattr(args, 'tf_layers',      2)
+        tf_heads            = getattr(args, 'tf_heads',       max(4, hidden_dim // 32))
+
+        num_heads = max(1, hidden_dim // 64)
+
+        # Speaker branches (same as v13)
+        if self.feat_type in ['frm_align', 'frm_unalign']:
+            self.audio_encoder = LSTMSeqEncoder(audio_dim, hidden_dim, dropout)
+            self.text_encoder  = LSTMSeqEncoder(text_dim,  hidden_dim, dropout)
+        else:
+            self.audio_encoder = MLPEncoder(audio_dim, hidden_dim, dropout)
+            self.text_encoder  = MLPEncoder(text_dim,  hidden_dim, dropout)
+
+        # Listener face branch (same as v13)
+        self.video_encoder = CLSTransformerEncoder(
+            in_dim=video_dim, hidden_dim=hidden_dim,
+            num_heads=tf_heads, num_layers=tf_layers, dropout=dropout,
+        )
+
+        # Listener body branch: separate pose / flow encoders
+        self.pose_encoder = LSTMSeqEncoder(self.POSE_DIM, hidden_dim, dropout)
+        self.flow_encoder = LSTMSeqEncoder(self.FLOW_DIM, hidden_dim, dropout)
+        self.body_norm    = nn.LayerNorm(hidden_dim)
+        # gate: how much body to admit into the listener representation
+        self.body_gate = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim), nn.Sigmoid()
+        )
+        self.listener_norm = nn.LayerNorm(hidden_dim)
+
+        # Speaker bidir cross-attention (same as v13)
+        self.cross_attn_a2t = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
+        self.proj_a2t       = nn.Linear(hidden_dim, hidden_dim)
+        self.norm_a2t       = nn.LayerNorm(hidden_dim)
+        self.cross_attn_t2a = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
+        self.proj_t2a       = nn.Linear(hidden_dim, hidden_dim)
+        self.norm_t2a       = nn.LayerNorm(hidden_dim)
+        self.speaker_drop   = nn.Dropout(dropout)
+
+        # Fusion (same as v13)
+        self.cross_attn_fusion = nn.MultiheadAttention(hidden_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm_fusion       = nn.LayerNorm(hidden_dim)
+        self.fuse_drop         = nn.Dropout(dropout)
+
+        self.fc_out_1 = nn.Linear(hidden_dim, output_dim1)
+        self.fc_out_2 = nn.Linear(hidden_dim, output_dim2)
+
+    def _encode_body(self, body):
+        # body: (B, Tb, 43) -> pose (27) + flow (16)
+        pose = body[:, :, :self.POSE_DIM]
+        flow = body[:, :, self.POSE_DIM:self.POSE_DIM + self.FLOW_DIM]
+        pose_h = self.pose_encoder(pose).mean(dim=1)   # (B, H)
+        flow_h = self.flow_encoder(flow).mean(dim=1)   # (B, H)
+        return self.body_norm(pose_h + flow_h)         # (B, H)
+
+    def forward(self, batch):
+        audio = batch['audios']
+        text  = batch['texts']
+        video = batch['videos']
+
+        # Speaker encoding
+        if self.feat_type in ['frm_align', 'frm_unalign']:
+            h_a = self.audio_encoder(audio)
+            h_t = self.text_encoder(text)
+        else:
+            h_a = self.audio_encoder(audio).unsqueeze(1)
+            h_t = self.text_encoder(text).unsqueeze(1)
+
+        # Listener face: CLS token
+        listener_feat = self.video_encoder(video)      # (B, H)
+
+        # Listener body: gated add into the listener representation
+        if 'bodys' in batch:
+            body_feat = self._encode_body(batch['bodys'])            # (B, H)
+            g = self.body_gate(torch.cat([listener_feat, body_feat], dim=-1))
+            listener_feat = self.listener_norm(listener_feat + g * body_feat)
+
+        # Speaker bidir cross-attention (same as v13)
+        a2t, _ = self.cross_attn_a2t(query=h_a, key=h_t, value=h_t)
+        a2t     = self.norm_a2t(self.proj_a2t(a2t))
+        t2a, _ = self.cross_attn_t2a(query=h_t, key=h_a, value=h_a)
+        t2a     = self.norm_t2a(self.proj_t2a(t2a))
+
+        sp_a = self.speaker_drop(a2t.mean(dim=1))
+        sp_t = self.speaker_drop(t2a.mean(dim=1))
+
+        if self.training and self.speaker_drop_p > 0 and torch.rand(1).item() < self.speaker_drop_p:
+            sp_a = torch.zeros_like(sp_a)
+            sp_t = torch.zeros_like(sp_t)
+
+        # Fusion (same as v13)
+        q  = listener_feat.unsqueeze(1)
+        kv = torch.stack([sp_a, sp_t], dim=1)
+        attn_out, _ = self.cross_attn_fusion(query=q, key=kv, value=kv)
+        features = self.fuse_drop(self.norm_fusion(attn_out.squeeze(1) + listener_feat))
+
+        emos_out  = self.fc_out_1(features)
+        vals_out  = self.fc_out_2(features)
+        interloss = torch.zeros(1, device=audio.device).squeeze()
+        return features, emos_out, vals_out, interloss

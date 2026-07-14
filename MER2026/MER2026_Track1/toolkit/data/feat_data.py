@@ -58,6 +58,22 @@ class Data_Feat(Dataset):
             audios, texts, videos = pad_to_maxlen_pre_modality(audios, texts, videos) # 样本级别对齐
         self.audios, self.texts, self.videos = audios, texts, videos
 
+        # optional 4th modality: listener body language (pose + optical flow).
+        # only read when --body_feature is set; uses the video (listener) scale
+        # so it keeps the same temporal resolution as the face-CLIP video.
+        self.body_feature = getattr(args, 'body_feature', None)
+        if self.body_feature:
+            body_root = os.path.join(feat_root, self.body_feature)
+            bodys, self.bdim = func_read_multiprocess(body_root, self.names, read_type='feat', scale_factor=video_scale)
+            if self.feat_type == 'utt':
+                bodys = [np.mean(b, axis=0) for b in bodys]
+            else:  # frm_align / frm_unalign: pad to this modality's own max length
+                body_maxlen = max(len(f) for f in bodys)
+                bodys = [func_mapping_feature(b, body_maxlen) for b in bodys]
+            self.bodys = bodys
+        else:
+            self.bodys, self.bdim = None, 0
+
  
     def __len__(self):
         return len(self.names)
@@ -72,6 +88,8 @@ class Data_Feat(Dataset):
             val   = self.labels[index]['val'],
             name  = self.names[index],
         )
+        if self.bodys is not None:
+            instance['body'] = self.bodys[index]
         return instance
     
 
@@ -85,7 +103,10 @@ class Data_Feat(Dataset):
             texts  = torch.FloatTensor(np.array(texts)),
             videos = torch.FloatTensor(np.array(videos)),
         )
-        
+        if 'body' in instances[0]:
+            bodys = [instance['body'] for instance in instances]
+            batch['bodys'] = torch.FloatTensor(np.array(bodys))
+
         emos  = torch.LongTensor([instance['emo']  for instance in instances])
         vals  = torch.FloatTensor([instance['val']  for instance in instances])
         names = [instance['name'] for instance in instances]

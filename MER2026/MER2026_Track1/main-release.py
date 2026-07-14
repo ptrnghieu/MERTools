@@ -122,6 +122,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio_feature', type=str, default=None, help='audio feature name')
     parser.add_argument('--text_feature',  type=str, default=None, help='text feature name')
     parser.add_argument('--video_feature', type=str, default=None, help='video feature name')
+    parser.add_argument('--body_feature', type=str, default=None, help='optional 4th modality: listener body pose+flow feature name')
     parser.add_argument('--feat_type',  type=str, default=None, help='feature type [utt, frm_align, frm_unalign]')
     parser.add_argument('--feat_scale', type=int, default=None, help='pre-compress input from [seqlen, dim] -> [seqlen/scale, dim]')
     parser.add_argument('--video_feat_scale', type=int, default=0, help='per-modality scale for video only (0=use feat_scale); lower keeps more listener temporal detail')
@@ -235,6 +236,7 @@ if __name__ == '__main__':
     assert len(train_loaders) == len(eval_loaders)
     print (f'train&val folder:{len(train_loaders)}; test sets:{len(test_loaders)}')
     args.audio_dim, args.text_dim, args.video_dim = train_loaders[0].dataset.get_featdim()
+    args.body_dim = getattr(train_loaders[0].dataset, 'bdim', 0)
 
     # Pre-extract test video features for Video CORAL alignment (CPU tensor, shared across folds)
     _test_video_feats = None

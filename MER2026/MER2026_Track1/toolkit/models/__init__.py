@@ -45,6 +45,7 @@ from .memocmt_v18 import MemoCMTV18
 from .memocmt_v19 import MemoCMTV19
 from .memocmt_v20 import MemoCMTV20
 from .memocmt_v21 import MemoCMTV21
+from .memocmt_v22 import MemoCMTV22
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -172,6 +173,10 @@ class get_models(nn.Module):
             # v13 + attention-pooling for speaker (learnable query) instead of
             # mean-pool: focuses on salient speaker frames, output stays static
             'memocmt_v21': MemoCMTV21,
+
+            # v13 + listener body-language branch (pose + optical flow), gated
+            # into the listener representation (--body_feature required)
+            'memocmt_v22': MemoCMTV22,
 
         }
         self.model = MODEL_MAP[args.model](args)
