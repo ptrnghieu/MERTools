@@ -46,6 +46,7 @@ from .memocmt_v19 import MemoCMTV19
 from .memocmt_v20 import MemoCMTV20
 from .memocmt_v21 import MemoCMTV21
 from .memocmt_v22 import MemoCMTV22
+from .memocmt_v23 import MemoCMTV23
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -177,6 +178,10 @@ class get_models(nn.Module):
             # v13 + listener body-language branch (pose + optical flow), gated
             # into the listener representation (--body_feature required)
             'memocmt_v22': MemoCMTV22,
+
+            # v22 redesigned: body as a K/V token (pure face Query), body encoder
+            # = frame-wise MLP + max-pool instead of LSTM+mean (--body_feature)
+            'memocmt_v23': MemoCMTV23,
 
         }
         self.model = MODEL_MAP[args.model](args)
