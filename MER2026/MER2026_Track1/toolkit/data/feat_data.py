@@ -32,12 +32,20 @@ class Data_Feat(Dataset):
         assert self.feat_scale >= 1
         assert self.feat_type in ['utt', 'frm_align', 'frm_unalign']
 
+        # per-modality video scale override: 0/unset -> use feat_scale.
+        # video is the listener's only signal (the prediction target); a lower
+        # scale keeps more temporal detail (micro-expressions) than the global
+        # feat_scale, without changing the speaker (audio/text) resolution.
+        video_scale = getattr(args, 'video_feat_scale', 0) or self.feat_scale
+        self.video_scale = video_scale
+        assert video_scale >= 1
+
         # read datas (reduce __getitem__ durations)
         # Compress and truncate inside each worker to keep IPC payload small.
         # max_seqlen caps outlier-length sequences after scale compression.
         audios, self.adim = func_read_multiprocess(audio_root, self.names, read_type='feat', scale_factor=self.feat_scale)
         texts,  self.tdim = func_read_multiprocess(text_root,  self.names, read_type='feat', scale_factor=self.feat_scale)
-        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=self.feat_scale)
+        videos, self.vdim = func_read_multiprocess(video_root, self.names, read_type='feat', scale_factor=video_scale)
 
         ## read batch (reduce collater durations)
         # step2: align to batch

@@ -124,6 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('--video_feature', type=str, default=None, help='video feature name')
     parser.add_argument('--feat_type',  type=str, default=None, help='feature type [utt, frm_align, frm_unalign]')
     parser.add_argument('--feat_scale', type=int, default=None, help='pre-compress input from [seqlen, dim] -> [seqlen/scale, dim]')
+    parser.add_argument('--video_feat_scale', type=int, default=0, help='per-modality scale for video only (0=use feat_scale); lower keeps more listener temporal detail')
     # Params for raw inputs
     parser.add_argument('--e2e_name', type=str, default=None, help='e2e pretrained model names')
     parser.add_argument('--e2e_dim',  type=int, default=None, help='e2e pretrained model hidden size')
