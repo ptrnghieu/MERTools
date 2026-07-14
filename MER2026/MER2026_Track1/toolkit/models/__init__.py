@@ -50,6 +50,7 @@ from .memocmt_v23 import MemoCMTV23
 from .memocmt_v24 import MemoCMTV24
 from .memocmt_v25 import MemoCMTV25
 from .memocmt_v26 import MemoCMTV26
+from .memocmt_v27 import MemoCMTV27
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -197,6 +198,10 @@ class get_models(nn.Module):
             # v13 + Delta video features: subtract consecutive frames to
             # suppress static identity (attacks the identity/cross-role shortcut)
             'memocmt_v26': MemoCMTV26,
+
+            # v13 + dual-pooling K/V: fusion K/V = [sp_a_mean, sp_a_max,
+            # sp_t_mean, sp_t_max] (4 tokens), MHA mechanism unchanged, 0 new params
+            'memocmt_v27': MemoCMTV27,
 
         }
         self.model = MODEL_MAP[args.model](args)
