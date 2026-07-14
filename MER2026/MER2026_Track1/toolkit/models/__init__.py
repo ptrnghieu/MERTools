@@ -48,6 +48,7 @@ from .memocmt_v21 import MemoCMTV21
 from .memocmt_v22 import MemoCMTV22
 from .memocmt_v23 import MemoCMTV23
 from .memocmt_v24 import MemoCMTV24
+from .memocmt_v25 import MemoCMTV25
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -187,6 +188,10 @@ class get_models(nn.Module):
             # v13 + FiLM fusion (GP1) + modality dropout (GP2): capacity-reducing
             # fusion (scale&shift vs 2-token MHA) + drop one speaker modality
             'memocmt_v24': MemoCMTV24,
+
+            # v13 with speaker LSTM -> per-token MLP projection (keeps the
+            # pretrained backbone's clean context; fewer params, less overfit)
+            'memocmt_v25': MemoCMTV25,
 
         }
         self.model = MODEL_MAP[args.model](args)
