@@ -150,6 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('--label_smoothing', type=float, default=0.0, help='label smoothing factor (0=disabled)')
     parser.add_argument('--use_focal', action='store_true', default=False, help='use focal loss instead of CE (combine with --use_class_weight for alpha)')
     parser.add_argument('--focal_gamma', type=float, default=2.0, help='focal loss focusing parameter gamma')
+    parser.add_argument('--modality_dropout', type=float, default=None, help='prob of dropping exactly one speaker modality (audio/text) per train step')
     parser.add_argument('--use_sam', action='store_true', default=False, help='use Sharpness-Aware Minimization (wraps the base optimizer)')
     parser.add_argument('--sam_rho', type=float, default=0.05, help='SAM neighborhood size rho (ASAM: try 0.5-2.0)')
     parser.add_argument('--sam_adaptive', action='store_true', default=False, help='use ASAM (scale-invariant perturbation)')

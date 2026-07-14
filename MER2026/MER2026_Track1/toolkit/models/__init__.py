@@ -47,6 +47,7 @@ from .memocmt_v20 import MemoCMTV20
 from .memocmt_v21 import MemoCMTV21
 from .memocmt_v22 import MemoCMTV22
 from .memocmt_v23 import MemoCMTV23
+from .memocmt_v24 import MemoCMTV24
 
 class get_models(nn.Module):
     def __init__(self, args):
@@ -182,6 +183,10 @@ class get_models(nn.Module):
             # v22 redesigned: body as a K/V token (pure face Query), body encoder
             # = frame-wise MLP + max-pool instead of LSTM+mean (--body_feature)
             'memocmt_v23': MemoCMTV23,
+
+            # v13 + FiLM fusion (GP1) + modality dropout (GP2): capacity-reducing
+            # fusion (scale&shift vs 2-token MHA) + drop one speaker modality
+            'memocmt_v24': MemoCMTV24,
 
         }
         self.model = MODEL_MAP[args.model](args)

@@ -336,3 +336,13 @@ memocmt_v23:
   body_dropout: [0.4]
   tf_layers: [2]
   tf_heads: [4]
+
+memocmt_v24:
+  hidden_dim: [64, 128, 256]
+  dropout: [0.2, 0.3, 0.4, 0.5]
+  grad_clip: [-1.0]
+  lr: [1e-3, 1e-4]
+  fusion_type: [film]
+  modality_dropout: [0.0, 0.15]
+  tf_layers: [2]
+  tf_heads: [4]
